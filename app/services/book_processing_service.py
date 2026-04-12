@@ -1,7 +1,11 @@
-"""Book processing pipeline service"""
-import uuid
-from pathlib import Path
+"""Book processing service - orchestrates the entire book processing pipeline"""
 from typing import Optional
+from app.models.book import Book, ProcessingStatus, AuditResult
+from app.core.database import BookRepository, ChapterRepository, TextChunkRepository
+from app.core.storage import StorageService
+from app.utils.text_extraction import TextExtractor
+from app.services.audit_service import AuditService
+from app.services.semantic_splitter import SemanticSplitter
 from app.providers.llm_provider import LLMProvider
 from app.providers.audio_provider import AudioGenerationProvider
 from app.providers.image_provider import ImageGenerationProvider
@@ -12,6 +16,10 @@ from app.services.audit_service import AuditService
 from app.utils.text_extraction import TextExtractor
 from app.models.book import ProcessingStatus, AuditResult
 from config import settings
+from app.utils.logger import get_logger
+from app.tasks.book_tasks import process_book_async
+
+logger = get_logger("vibetale")
 
 
 class BookProcessingService:
@@ -59,17 +67,23 @@ class BookProcessingService:
             file_path: Path to the book file
             file_format: File format ('epub' or 'pdf')
         """
+        logger.info(f"Starting book processing: {book_id}")
+        
         # Update status to processing
         self.book_repo.update(book_id, {'processing_status': ProcessingStatus.PROCESSING})
         
         try:
             # Step 1: Extract text
+            logger.debug(f"Extracting text from {file_path}")
             extracted_data = TextExtractor.extract_text(file_path, file_format)
             full_text = extracted_data['text']
             chapters_data = extracted_data['chapters']
+            logger.info(f"Extracted {len(chapters_data)} chapters, {len(full_text)} characters")
             
             # Step 2: Audit check
+            logger.debug("Performing content audit")
             audit_result = await self.audit_service.audit_book(full_text)
+            logger.info(f"Audit result: {audit_result}")
             
             if audit_result != AuditResult.APPROVED:
                 self.book_repo.update(book_id, {
@@ -81,6 +95,7 @@ class BookProcessingService:
             self.book_repo.update(book_id, {'audit_result': AuditResult.APPROVED})
             
             # Step 3: Create chapters in database
+            logger.debug(f"Creating {len(chapters_data)} chapter records")
             for chapter_data in chapters_data:
                 chapter_record = self.chapter_repo.create({
                     'id': str(uuid.uuid4()),
@@ -91,7 +106,9 @@ class BookProcessingService:
                 chapter_data['db_id'] = chapter_record['id']
             
             # Step 4: Split text into chunks and process each
+            logger.debug("Splitting text into semantic chunks")
             chunks = self.semantic_splitter.split_text(full_text)
+            logger.info(f"Split text into {len(chunks)} chunks")
             
             for i, chunk_text in enumerate(chunks):
                 # Determine which chapter this chunk belongs to
@@ -110,32 +127,37 @@ class BookProcessingService:
                 })
                 
                 # Step 5: Analyze scene
+                logger.debug(f"Analyzing scene for chunk {i+1}")
                 analysis = await self.llm_provider.analyze_scene(chunk_text)
                 
                 # Step 6: Generate audio
-                audio_path = await self.audio_provider.generate_audio(
-                    prompt=analysis.sfx_prompt,
-                    duration=8,
-                    negative_prompt="music, speech, noise, distortion"
-                )
-                audio_url = await self.storage_service.upload_file(audio_path)
+                if analysis.sfx_prompt:
+                    logger.debug(f"Generating audio for chunk {i+1}")
+                    audio_path = await self.audio_provider.generate_audio(
+                        prompt=analysis.sfx_prompt,
+                        duration=8,
+                        negative_prompt="music, speech, noise, distortion"
+                    )
+                    audio_url = await self.storage_service.upload_file(audio_path)
+                    await self.chunk_repo.update(chunk_id, audio_url=audio_url)
                 
                 # Step 7: Generate image
-                image_path = await self.image_provider.generate_image(
-                    prompt=analysis.image_prompt,
-                    width=512,
-                    height=512
-                )
-                image_url = await self.storage_service.upload_file(image_path)
+                if analysis.image_prompt:
+                    logger.debug(f"Generating image for chunk {i+1}")
+                    image_path = await self.image_provider.generate_image(
+                        prompt=analysis.image_prompt,
+                        width=512,
+                        height=512
+                    )
+                    image_url = await self.storage_service.upload_file(image_path)
+                    await self.chunk_repo.update(chunk_id, image_url=image_url)
                 
                 # Step 8: Update chunk with analysis and media URLs
-                self.chunk_repo.update(chunk_id, {
+                await self.chunk_repo.update(chunk_id, {
                     'scene': analysis.scene,
                     'emotion': analysis.emotion,
                     'sfx_prompt': analysis.sfx_prompt,
                     'image_prompt': analysis.image_prompt,
-                    'audio_url': audio_url,
-                    'image_url': image_url,
                     'analyzed': True
                 })
             

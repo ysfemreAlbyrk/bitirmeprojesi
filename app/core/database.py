@@ -2,10 +2,13 @@
 from supabase import create_client, Client
 from config import settings
 from typing import Optional, List, Dict, Any
+from app.utils.logger import get_logger
+
+logger = get_logger("vibetale")
 
 
 class Database:
-    """Singleton database connection manager"""
+    """Singleton database connection manager with connection pooling"""
     
     _instance: Optional['Database'] = None
     _client: Optional[Client] = None
@@ -17,10 +20,32 @@ class Database:
     
     def __init__(self):
         if self._client is None:
+            # Configure httpx limits for connection pooling
+            import httpx
+            limits = httpx.Limits(
+                max_connections=settings.db_pool_maxsize,
+                max_keepalive_connections=settings.db_pool_connections
+            )
+            
+            # Configure timeouts
+            timeout = httpx.Timeout(
+                connect=settings.db_connection_timeout,
+                read=settings.db_read_timeout,
+                write=settings.db_write_timeout,
+                pool=5.0
+            )
+            
+            # Create client with connection pooling
             self._client = create_client(
                 settings.supabase_url,
-                settings.supabase_service_key
+                settings.supabase_service_key,
+                options={
+                    'timeout': timeout,
+                    'limits': limits
+                }
             )
+            
+            logger.info(f"Database connection pool configured: max_connections={settings.db_pool_maxsize}, keepalive={settings.db_pool_connections}")
     
     @property
     def client(self) -> Client:

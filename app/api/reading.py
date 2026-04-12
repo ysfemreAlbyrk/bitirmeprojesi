@@ -1,11 +1,9 @@
-"""Reading session and progress API endpoints"""
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
-import uuid
-
+"""Reading progress and session API endpoints"""
+from fastapi import APIRouter, Depends, HTTPException
 from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate
-from app.core.database import ReadingProgressRepository, Database
-from app.core.dependencies import get_database
+from app.core.database import ReadingProgressRepository, BookRepository, TextChunkRepository
+from app.core.dependencies import get_reading_progress_repository, get_book_repository, get_text_chunk_repository
+from app.utils.pagination import PaginatedResponse, PaginationParams
 
 router = APIRouter(prefix="/reading", tags=["reading"])
 
@@ -78,18 +76,28 @@ async def create_bookmark(
         raise HTTPException(status_code=500, detail="Failed to create bookmark")
 
 
-@router.get("/bookmarks/{user_id}/{book_id}")
+@router.get("/bookmarks/{user_id}/{book_id}", response_model=PaginatedResponse)
 async def list_bookmarks(
     user_id: str,
     book_id: str,
+    pagination: PaginationParams = Depends(),
     db: Database = Depends(get_database)
 ):
     """
-    List all bookmarks for a user-book pair.
+    List all bookmarks for a user-book pair with pagination.
     """
     response = db.client.table('bookmarks').select('*').eq('user_id', user_id).eq('book_id', book_id).execute()
+    all_bookmarks = response.data
+    total = len(all_bookmarks)
     
-    return response.data
+    # Apply pagination
+    paginated_items = all_bookmarks[pagination.offset:pagination.offset + pagination.page_size]
+    
+    return paginate(
+        items=paginated_items,
+        total=total,
+        params=pagination
+    )
 
 
 @router.delete("/bookmarks/{bookmark_id}")

@@ -7,7 +7,6 @@ This guide will walk you through setting up the VibeTale backend from scratch.
 Before starting, ensure you have the following installed on your system:
 
 - **Python 3.10 or higher**
-- **Docker** and **Docker Compose**
 - **Git**
 - **NVIDIA GPU with CUDA** (for MMAudio and local image generation)
 - **WSL2** (if on Windows)
@@ -17,10 +16,6 @@ Before starting, ensure you have the following installed on your system:
 ```bash
 # Check Python version
 python --version
-
-# Check Docker
-docker --version
-docker-compose --version
 
 # Check GPU (Linux/WSL2)
 nvidia-smi
@@ -126,64 +121,114 @@ DEBUG=true
 1. After setting up Supabase (Step 5), get keys from dashboard
 2. Settings → API
 
-## Step 5: Set Up Supabase with Docker
+## Step 5: Set Up Redis
 
-### 5.1 Create Required Directories
+Redis is used for caching and background task queue (Celery).
+
+### 5.1 Install Redis
+
+**On Windows (WSL2):**
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis
+sudo systemctl enable redis
+```
+
+**On Linux:**
+```bash
+sudo apt update
+sudo apt install redis-server
+sudo systemctl start redis
+sudo systemctl enable redis
+```
+
+**On Mac:**
+```bash
+brew install redis
+brew services start redis
+```
+
+### 5.2 Verify Redis is Running
 
 ```bash
-mkdir -p supabase/data
-mkdir -p supabase/migrations
+redis-cli ping
 ```
 
-### 5.2 Start Supabase
+Expected response: `PONG`
+
+### 5.3 Configure Redis in .env
+
+Update your `.env` file:
+
+```env
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+REDIS_URL=redis://localhost:6379/0
+```
+
+If you set a password for Redis, include it in the configuration.
+
+### 5.4 Test Redis Connection
 
 ```bash
-docker-compose up -d
+# Test connection
+redis-cli ping
+
+# Test set/get
+redis-cli set test "hello"
+redis-cli get test
 ```
 
-### 5.3 Verify Supabase is Running
+## Step 6: Set Up Supabase Cloud
 
-```bash
-# Check container status
-docker-compose ps
+### 6.1 Create Supabase Project
 
-# View logs
-docker-compose logs -f supabase
-```
+1. Go to [https://supabase.com](https://supabase.com)
+2. Sign up or log in
+3. Click "New Project"
+4. Choose a name (e.g., "vibetale")
+5. Choose a database password (save it securely)
+6. Select a region closest to you
+7. Click "Create new project"
 
-You should see the Supabase container running on ports 8000 and 5432.
+### 6.2 Get API Credentials
 
-### 5.4 Create Storage Bucket
+Once your project is created:
 
-Connect to the Supabase SQL interface:
+1. Go to **Settings** → **API**
+2. Copy the following values to your `.env` file:
+   - **Project URL** → `SUPABASE_URL`
+   - **anon public** key → `SUPABASE_KEY`
+   - **service_role** key → `SUPABASE_SERVICE_KEY`
 
-```bash
-# Connect to PostgreSQL
-docker exec -it vibetale_supabase psql -U postgres -d vibetale
-```
+### 6.3 Create Storage Bucket
 
-Run the following SQL:
+1. Go to **Storage** in the left sidebar
+2. Click "New bucket"
+3. Name it `media-assets`
+4. Make it **Public**
+5. Click "Create bucket"
 
-```sql
--- Create storage bucket
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('media-assets', 'media-assets', true);
+### 6.4 Apply Database Schema
 
--- Exit
-\q
-```
+1. Go to **SQL Editor** in the left sidebar
+2. Copy the contents of `supabase/migrations/001_initial_schema.sql`
+3. Paste it into the SQL Editor
+4. Click "Run" to execute the schema
 
-### 5.5 Verify Database Schema
+### 6.5 Verify Setup
 
-The SQL migration file should have been applied automatically. Verify:
-
-```bash
-docker exec -it vibetale_supabase psql -U postgres -d vibetale -c "\dt"
-```
+Check that:
+- Database tables are created (books, chapters, text_chunks, reading_progress, bookmarks, media_assets)
+- Storage bucket `media-assets` exists
+- API credentials are correctly configured in `.env`
 
 You should see tables: users, books, chapters, text_chunks, reading_sessions, reading_progress, bookmarks, media_assets.
 
-## Step 6: Set Up Ollama (Optional)
+## Step 7: Set Up Ollama (Optional)
 
 If you want to use Ollama instead of Gemini:
 
@@ -222,7 +267,7 @@ curl http://localhost:11434/api/generate -d '{
 }'
 ```
 
-## Step 7: Verify MMAudio Installation
+## Step 8: Verify MMAudio Installation
 
 Ensure MMAudio is installed at the path specified in `.env`:
 
@@ -261,7 +306,7 @@ Open your browser and visit:
 - **ReDoc**: http://localhost:8000/redoc
 - **Health Check**: http://localhost:8000/health
 
-## Step 9: Test the API
+## Step 11: Test the API
 
 ### 9.1 Test Health Endpoint
 
@@ -311,21 +356,6 @@ netstat -ano | findstr :8000
 APP_PORT=8001
 ```
 
-### Issue: Supabase Container Won't Start
-
-**Solution:**
-```bash
-# Check logs
-docker-compose logs supabase
-
-# Recreate container
-docker-compose down
-docker-compose up -d
-
-# Check directory permissions
-chmod 777 supabase/data
-```
-
 ### Issue: GPU Not Detected
 
 **Solution:**
@@ -335,6 +365,17 @@ nvidia-smi
 
 # Install CUDA toolkit if needed
 # For WSL2, ensure GPU passthrough is enabled
+```
+
+### Issue: Supabase Connection Failed
+
+**Solution:**
+```bash
+# Verify your .env file has correct Supabase credentials
+# Check SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_KEY
+
+# Test connection to Supabase
+curl https://your-project.supabase.co
 ```
 
 ### Issue: Ollama Connection Refused
@@ -402,11 +443,17 @@ Once the server is running:
 ### Start All Services
 
 ```bash
+# Start Redis (if not running)
+redis-server
+
 # Start Supabase
 docker-compose up -d
 
 # Start Ollama (if using)
 ollama serve
+
+# Start Celery worker (in separate terminal)
+python start_celery_worker.py
 
 # Start FastAPI (in separate terminal)
 uvicorn main:app --reload
@@ -417,20 +464,25 @@ uvicorn main:app --reload
 ```bash
 # Stop FastAPI (Ctrl+C)
 
+# Stop Celery worker (Ctrl+C)
+
 # Stop Ollama (Ctrl+C)
 
-# Stop Supabase
-docker-compose down
+# Stop Redis
+redis-cli shutdown
 ```
 
 ### Check Service Status
 
 ```bash
-# Supabase
-docker-compose ps
+# Redis
+redis-cli ping
 
 # Ollama
 curl http://localhost:11434/api/tags
+
+# Celery
+# Check if worker is running (should be in its terminal output)
 
 # FastAPI
 curl http://localhost:8000/health

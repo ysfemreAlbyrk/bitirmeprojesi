@@ -16,3 +16,13 @@ diffusers
 transformers
 accelerate
 requests
+redis
+hiredis
+python-magic
+python-magic-bin; sys_platform == 'win32' or sys_platform == 'darwin'
+slowapi
+celery
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock

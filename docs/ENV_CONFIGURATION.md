@@ -108,6 +108,72 @@ Name of the Supabase storage bucket for media assets.
 - **Required**: Yes
 - **Note**: Bucket must be created in Supabase before use
 
+## Logging Configuration
+
+### LOG_LEVEL
+Logging level for the application.
+- **Default**: `INFO`
+- **Options**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+- **Note**: Use `DEBUG` for development, `INFO` or higher for production
+
+### LOG_DIR
+Directory for log files.
+- **Default**: `logs`
+- **Required**: No
+- **Note**: Directory will be created if it doesn't exist
+
+### LOG_MAX_BYTES
+Maximum size of a single log file before rotation.
+- **Default**: `10485760` (10MB)
+- **Required**: No
+- **Note**: When file reaches this size, it will be rotated
+
+### LOG_BACKUP_COUNT
+Number of backup log files to keep.
+- **Default**: `5`
+- **Required**: No
+- **Note**: Older logs will be deleted when this limit is exceeded
+
+## Rate Limiting Configuration
+
+### RATE_LIMIT_ENABLED
+Enable or disable rate limiting.
+- **Default**: `true`
+- **Options**: `true`, `false`
+- **Note**: Disable only for development
+
+### RATE_LIMIT_STORAGE
+Storage backend for rate limiting.
+- **Default**: `memory`
+- **Options**: `memory`, `redis`
+- **Note**: Use `redis` for distributed deployments
+
+## Celery Configuration
+
+### CELERY_BROKER_URL
+Redis URL for Celery message broker.
+- **Default**: `redis://localhost:6379/0`
+- **Required**: Yes (for background task processing)
+- **Note**: Should match Redis configuration
+
+### CELERY_RESULT_BACKEND
+Redis URL for Celery result storage.
+- **Default**: `redis://localhost:6379/0`
+- **Required**: Yes (for background task processing)
+- **Note**: Should match Redis configuration
+
+### CELERY_WORKER_CONCURRENCY
+Number of concurrent Celery worker processes.
+- **Default**: `2`
+- **Required**: No
+- **Note**: Adjust based on CPU cores (typically 2-4 per core)
+
+### CELERY_TASK_TIME_LIMIT
+Maximum time in seconds for a Celery task.
+- **Default**: `1800` (30 minutes)
+- **Required**: No
+- **Note**: Book processing can take time, adjust as needed
+
 ## Example Configuration
 
 ```env

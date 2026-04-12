@@ -17,7 +17,6 @@ from app.utils.text_extraction import TextExtractor
 from app.models.book import ProcessingStatus, AuditResult
 from config import settings
 from app.utils.logger import get_logger
-from app.tasks.book_tasks import process_book_async
 
 logger = get_logger("vibetale")
 

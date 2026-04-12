@@ -1,5 +1,5 @@
 """Book management API endpoints"""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from typing import List
 import uuid
 from pathlib import Path
@@ -108,6 +108,7 @@ async def upload_book(
 @router.get("/", response_model=PaginatedResponse[BookResponse])
 @limiter.limit("60/minute")  # 60 requests per minute per IP
 async def list_books(
+    request: Request,
     user_id: str,
     pagination: PaginationParams = Depends(),
     book_repo: BookRepository = Depends(get_book_repository)

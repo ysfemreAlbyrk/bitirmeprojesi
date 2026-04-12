@@ -1,10 +1,9 @@
-fastapi
-uvicorn[standard]
+fastapi[standard]
 pydantic
 pydantic-settings
 python-multipart
 supabase
-google-generativeai
+google-genai
 ebooklib
 pypdf
 python-docx

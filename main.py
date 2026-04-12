@@ -4,6 +4,7 @@ from config import settings
 from app.utils.logger import setup_logger
 
 from app.api import books, reading, ambiance
+from app.middleware.rate_limit import limiter
 
 # Setup logging
 logger = setup_logger("vibetale")

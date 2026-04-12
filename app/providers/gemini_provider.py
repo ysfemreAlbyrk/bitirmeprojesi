@@ -1,7 +1,7 @@
 """Gemini API implementation of LLMProvider"""
 import json
 from typing import Dict, Any
-import google.generativeai as genai
+from google import genai
 from app.providers.llm_provider import LLMProvider, SceneAnalysis
 from config import settings
 
@@ -10,8 +10,8 @@ class GeminiProvider(LLMProvider):
     """Gemini API implementation for text analysis"""
     
     def __init__(self):
-        genai.configure(api_key=settings.gemini_api_key)
-        self.model = genai.GenerativeModel(settings.gemini_model)
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.model_name = settings.gemini_model
     
     async def analyze_scene(self, text: str) -> SceneAnalysis:
         """
@@ -43,7 +43,10 @@ class GeminiProvider(LLMProvider):
         full_prompt = f"{system_prompt}\n\nText segment:\n{text}"
         
         try:
-            response = await self.model.generate_content_async(full_prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt
+            )
             result_text = response.text
             
             # Parse JSON response
@@ -90,7 +93,10 @@ class GeminiProvider(LLMProvider):
         Text:\n{text}"""
         
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             result = json.loads(response.text)
             return result
         except Exception as e:
@@ -120,7 +126,10 @@ class GeminiProvider(LLMProvider):
         Text:\n{text}"""
         
         try:
-            response = await self.model.generate_content_async(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
             result = json.loads(response.text)
             return result
         except Exception as e:

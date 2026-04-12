@@ -48,7 +48,7 @@ CREATE TABLE text_chunks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     chapter_id UUID NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-    order INTEGER NOT NULL,
+    "order" INTEGER NOT NULL,
     text TEXT NOT NULL,
     scene TEXT,
     emotion TEXT,
@@ -79,7 +79,7 @@ CREATE TABLE reading_progress (
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     current_chunk_id UUID NOT NULL REFERENCES text_chunks(id),
     chapter_number INTEGER NOT NULL,
-    offset INTEGER NOT NULL,
+    "offset" INTEGER NOT NULL,
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(user_id, book_id)
 );
@@ -91,7 +91,7 @@ CREATE TABLE bookmarks (
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     chunk_id UUID NOT NULL REFERENCES text_chunks(id),
     chapter_number INTEGER NOT NULL,
-    offset INTEGER NOT NULL,
+    "offset" INTEGER NOT NULL,
     note TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

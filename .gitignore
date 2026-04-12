@@ -48,11 +48,6 @@ supabase/data/
 # Docker
 docker-compose.override.yml
 
-# Supabase Docker volumes (DB data & generated media — never commit)
-volumes/db/
-volumes/storage/
-# volumes/api/ is intentionally tracked (contains kong.yml)
-
 # Temporary Files
 *.tmp
 *.temp

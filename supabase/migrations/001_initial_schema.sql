@@ -48,7 +48,7 @@ CREATE TABLE text_chunks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     chapter_id UUID NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-    "order" INTEGER NOT NULL,
+    order INTEGER NOT NULL,
     text TEXT NOT NULL,
     scene TEXT,
     emotion TEXT,
@@ -166,14 +166,3 @@ CREATE POLICY "Users can delete own bookmarks" ON bookmarks
 
 -- Chapters and text chunks are accessible to anyone who can access the book
 -- (handled by the foreign key cascade and book-level RLS)
-
--- Storage bucket for generated media (audio + images)
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-    'media-assets',
-    'media-assets',
-    true,
-    52428800,
-    ARRAY['audio/wav', 'audio/mpeg', 'image/jpeg', 'image/png', 'image/webp']
-)
-ON CONFLICT (id) DO NOTHING;

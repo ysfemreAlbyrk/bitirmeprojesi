@@ -1,154 +1,168 @@
-# Supabase Docker Setup — VibeTale
+# Supabase Docker Setup Guide
 
-Self-hosted Supabase runs as **8 separate Docker services** orchestrated by `docker-compose.yml`. This replaces the old (broken) single-container approach.
+This guide explains how to set up Supabase locally using Docker for the VibeTale backend.
 
-## Service Map
+## Prerequisites
 
-| Container | Purpose | Port |
-|---|---|---|
-| `supabase-db` | PostgreSQL 15 | 5432 |
-| `supabase-kong` | API Gateway | **8000** (HTTP), 8443 (HTTPS) |
-| `supabase-auth` | GoTrue auth | internal |
-| `supabase-rest` | PostgREST | internal |
-| `supabase-storage` | File storage | internal |
-| `supabase-imgproxy` | Image transform | internal |
-| `supabase-meta` | DB management | internal |
-| `supabase-studio` | Studio UI | **54323** (direct) |
+- Docker installed on your system
+- Docker Compose installed
+- At least 4GB RAM allocated to Docker
 
-FastAPI runs separately on **port 8080**.
+## Setup Steps
 
-## First-Time Setup
-
-### Step 1 — Generate secrets
-
-Run the key generator (Python stdlib, no installs needed):
+### 1. Pull Supabase Docker Image
 
 ```bash
-python generate_keys.py
+docker pull supabase/supabase:latest
 ```
 
-Select **y** when prompted to auto-update `.env`. Then manually set:
+### 2. Create Docker Compose File
+
+Create a `docker-compose.yml` file in the project root:
+
+```yaml
+version: '3.8'
+
+services:
+  supabase:
+    image: supabase/supabase:latest
+    container_name: vibetale_supabase
+    ports:
+      - "8000:8000"  # API
+      - "5432:5432"  # PostgreSQL
+    environment:
+      POSTGRES_PASSWORD: your_password
+      POSTGRES_DB: vibetale
+      ANON_KEY: your_anon_key_here
+      SERVICE_ROLE_KEY: your_service_role_key_here
+    volumes:
+      - ./supabase/data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+```
+
+### 3. Generate API Keys
+
+Generate secure keys for your Supabase instance:
+
+```bash
+# Generate anon key
+openssl rand -base64 32
+
+# Generate service role key
+openssl rand -base64 32
+```
+
+### 4. Update Environment Variables
+
+Update your `.env` file with the Supabase configuration:
 
 ```env
-POSTGRES_PASSWORD=your_strong_password_here
-DASHBOARD_PASSWORD=your_dashboard_password_here
+SUPABASE_URL=http://localhost:8000
+SUPABASE_KEY=your_generated_anon_key
+SUPABASE_SERVICE_KEY=your_generated_service_role_key
 ```
 
-> `DASHBOARD_PASSWORD` must contain at least one letter (Kong basic-auth requirement).
-
-### Step 2 — Create required directories
+### 5. Start Supabase
 
 ```bash
-# Windows (PowerShell)
-New-Item -ItemType Directory -Force -Path volumes\api, volumes\db\data, volumes\storage
-
-# WSL2 / Linux
-mkdir -p volumes/api volumes/db/data volumes/storage
+docker-compose up -d
 ```
 
-### Step 3 — Pull images and start
+### 6. Apply Database Schema
+
+The SQL migration file will be automatically applied when the container starts because it's mounted to `/docker-entrypoint-initdb.d`.
+
+If you need to apply the schema manually:
 
 ```bash
-docker compose pull
-docker compose up -d
+# Connect to the PostgreSQL database
+docker exec -it vibetale_supabase psql -U postgres -d vibetale
+
+# Apply the schema
+\i /docker-entrypoint-initdb.d/001_initial_schema.sql
 ```
 
-### Step 4 — Verify all services are healthy
+### 7. Create Storage Bucket
 
-```bash
-docker compose ps
+Connect to the Supabase SQL interface and create the storage bucket:
+
+```sql
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('media-assets', 'media-assets', true);
 ```
 
-All containers should show `Up ... (healthy)` within ~60 seconds.  
-Check a specific service log if something is stuck:
+## Verification
+
+Check that Supabase is running:
 
 ```bash
-docker compose logs auth
-docker compose logs storage
+docker ps
 ```
 
-### Step 5 — Access Studio
+You should see the `vibetale_supabase` container running.
 
-Open **http://localhost:54323** — no login required (direct port).
-
-Or open **http://localhost:8000** and enter `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` (through Kong with basic-auth).
-
-## Database Schema
-
-The migration at `supabase/migrations/001_initial_schema.sql` runs automatically on first DB start via `/docker-entrypoint-initdb.d`. It creates:
-
-- `users`, `books`, `chapters`, `text_chunks`
-- `reading_sessions`, `reading_progress`, `bookmarks`, `media_assets`
-- RLS policies for all user-owned tables
-- `media-assets` storage bucket
-
-To verify tables were created:
+Test the API:
 
 ```bash
-docker exec -it supabase-db psql -U postgres -d postgres -c "\dt public.*"
-```
-
-To apply schema manually if needed:
-
-```bash
-docker exec -it supabase-db psql -U postgres -d postgres \
-  -f /docker-entrypoint-initdb.d/001_initial_schema.sql
+curl http://localhost:8000/health
 ```
 
 ## Useful Commands
 
-```bash
-# Start
-docker compose up -d
-
-# Stop (keeps data)
-docker compose down
-
-# Stop + wipe all data (destructive!)
-docker compose down -v && rm -rf volumes/db/data volumes/storage
-
-# Tail logs
-docker compose logs -f kong
-docker compose logs -f db
-
-# Open a psql shell
-docker exec -it supabase-db psql -U postgres -d postgres
-
-# Restart a single service
-docker compose restart storage
-```
-
-## Connecting from FastAPI
-
-The Supabase Python client connects through Kong on port 8000:
-
-```python
-# config.py reads these from .env automatically
-SUPABASE_URL = "http://localhost:8000"
-SUPABASE_KEY = "<your ANON_KEY>"        # for user-facing requests
-SUPABASE_SERVICE_KEY = "<SERVICE_ROLE_KEY>"  # for backend/admin operations
-```
-
-## Updating Images
+### View Logs
 
 ```bash
-docker compose pull          # fetch latest images
-docker compose down
-docker compose up -d
+docker-compose logs -f supabase
 ```
 
-Check [Supabase Docker Hub](https://hub.docker.com/u/supabase) for stable image tags to pin in `docker-compose.yml`.
+### Stop Supabase
+
+```bash
+docker-compose down
+```
+
+### Restart Supabase
+
+```bash
+docker-compose restart
+```
+
+### Access PostgreSQL Directly
+
+```bash
+docker exec -it vibetale_supabase psql -U postgres -d vibetale
+```
 
 ## Troubleshooting
 
-**`supabase-kong` exits immediately**  
-→ Check `volumes/api/kong.yml` exists and `ANON_KEY` / `SERVICE_ROLE_KEY` are set (not `CHANGEME_*`) in `.env`.
+### Port Already in Use
 
-**`supabase-db` unhealthy**  
-→ `docker compose logs db` — usually a bad `POSTGRES_PASSWORD` or leftover data in `volumes/db/data` from a previous run. Delete `volumes/db/data` and restart.
+If port 8000 or 5432 is already in use, modify the ports in `docker-compose.yml`.
 
-**`supabase-auth` fails to start**  
-→ Verify `JWT_SECRET` is at least 32 characters and `ANON_KEY` / `SERVICE_ROLE_KEY` are valid JWTs signed with that secret. Re-run `python generate_keys.py`.
+### Permission Issues
 
-**Port 8000 already in use**  
-→ Change `KONG_HTTP_PORT` in `.env` to e.g. `8001`. Update `SUPABASE_URL` and `SUPABASE_PUBLIC_URL` accordingly.
+Ensure the `./supabase/data` directory has proper permissions:
+
+```bash
+mkdir -p supabase/data
+chmod 777 supabase/data
+```
+
+### Container Won't Start
+
+Check the logs for errors:
+
+```bash
+docker-compose logs supabase
+```
+
+## Production Considerations
+
+For production deployment:
+- Use strong, randomly generated passwords and keys
+- Enable SSL/TLS
+- Set up regular backups
+- Configure proper resource limits
+- Use a managed Supabase instance instead of Docker
+- Enable Row Level Security (RLS) policies (already included in schema)

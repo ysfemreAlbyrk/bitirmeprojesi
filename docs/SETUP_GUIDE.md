@@ -118,7 +118,7 @@ DEBUG=true
 3. Copy and paste to `.env`
 
 **Clipdrop API Key:**
-1. Contact Clipdrop team at contact@clipdrop.co
+1. go to https://clipdrop.co/apis/account
 2. Get your API key
 3. Copy and paste to `.env`
 

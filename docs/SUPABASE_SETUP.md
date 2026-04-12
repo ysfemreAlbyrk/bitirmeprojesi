@@ -1,168 +1,94 @@
-# Supabase Docker Setup Guide
+# Supabase Cloud Setup — VibeTale
 
-This guide explains how to set up Supabase locally using Docker for the VibeTale backend.
+VibeTale uses **Supabase Cloud** for the database and file storage. No Docker or local services required.
 
-## Prerequisites
+## İlk Kurulum
 
-- Docker installed on your system
-- Docker Compose installed
-- At least 4GB RAM allocated to Docker
+### 1 — Proje Oluştur
 
-## Setup Steps
+1. [app.supabase.com](https://app.supabase.com) adresine git
+2. **New Project** → isim: `vibetale`, şifre seç, bölge: `eu-central-1` (Frankfurt)
+3. Proje oluşturulana kadar bekle (~1-2 dakika)
 
-### 1. Pull Supabase Docker Image
+### 2 — API Anahtarlarını Al
 
-```bash
-docker pull supabase/supabase:latest
-```
+**Project → Settings → API** sayfasından:
 
-### 2. Create Docker Compose File
+| Değişken | Kaynak |
+|---|---|
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_KEY` | `anon` `public` anahtarı |
+| `SUPABASE_SERVICE_KEY` | `service_role` `secret` anahtarı |
 
-Create a `docker-compose.yml` file in the project root:
-
-```yaml
-version: '3.8'
-
-services:
-  supabase:
-    image: supabase/supabase:latest
-    container_name: vibetale_supabase
-    ports:
-      - "8000:8000"  # API
-      - "5432:5432"  # PostgreSQL
-    environment:
-      POSTGRES_PASSWORD: your_password
-      POSTGRES_DB: vibetale
-      ANON_KEY: your_anon_key_here
-      SERVICE_ROLE_KEY: your_service_role_key_here
-    volumes:
-      - ./supabase/data:/var/lib/postgresql/data
-      - ./supabase/migrations:/docker-entrypoint-initdb.d
-    restart: unless-stopped
-```
-
-### 3. Generate API Keys
-
-Generate secure keys for your Supabase instance:
-
-```bash
-# Generate anon key
-openssl rand -base64 32
-
-# Generate service role key
-openssl rand -base64 32
-```
-
-### 4. Update Environment Variables
-
-Update your `.env` file with the Supabase configuration:
+`.env` dosyasını güncelle:
 
 ```env
-SUPABASE_URL=http://localhost:8000
-SUPABASE_KEY=your_generated_anon_key
-SUPABASE_SERVICE_KEY=your_generated_service_role_key
+SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
+SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5...
+SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5...
 ```
 
-### 5. Start Supabase
+### 3 — Veritabanı Şemasını Uygula
 
-```bash
-docker-compose up -d
-```
+**Project → SQL Editor → New query** açıp `supabase/migrations/001_initial_schema.sql` dosyasının içeriğini yapıştır ve çalıştır.
 
-### 6. Apply Database Schema
+Bu işlem şunları oluşturur:
+- `users`, `books`, `chapters`, `text_chunks`
+- `reading_sessions`, `reading_progress`, `bookmarks`, `media_assets`
+- RLS politikaları
+- `media-assets` storage bucket
 
-The SQL migration file will be automatically applied when the container starts because it's mounted to `/docker-entrypoint-initdb.d`.
+### 4 — Storage Bucket Doğrula
 
-If you need to apply the schema manually:
+**Project → Storage** sayfasında `media-assets` bucket'ın oluştuğunu kontrol et.
 
-```bash
-# Connect to the PostgreSQL database
-docker exec -it vibetale_supabase psql -U postgres -d vibetale
-
-# Apply the schema
-\i /docker-entrypoint-initdb.d/001_initial_schema.sql
-```
-
-### 7. Create Storage Bucket
-
-Connect to the Supabase SQL interface and create the storage bucket:
+Görünmüyorsa SQL Editor'de manuel olarak çalıştır:
 
 ```sql
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('media-assets', 'media-assets', true);
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'media-assets', 'media-assets', true, 52428800,
+    ARRAY['audio/wav', 'audio/mpeg', 'image/jpeg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO NOTHING;
 ```
 
-## Verification
-
-Check that Supabase is running:
+### 5 — FastAPI'yi Başlat
 
 ```bash
-docker ps
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-You should see the `vibetale_supabase` container running.
+Sağlık kontrolü: `http://localhost:8000/health`
 
-Test the API:
+## Bağlantı Bilgileri
 
-```bash
-curl http://localhost:8000/health
+FastAPI, Supabase'e şu şekilde bağlanır:
+
+```python
+# config.py otomatik olarak .env'den okur
+SUPABASE_URL  = "https://xxxx.supabase.co"   # PostgREST + Auth + Storage
+SUPABASE_KEY  = "<anon key>"                  # Kullanıcı istekleri
+SUPABASE_SERVICE_KEY = "<service_role key>"   # Backend/admin işlemleri
 ```
 
-## Useful Commands
+## Yeni Geliştirici Kurulumu
 
-### View Logs
-
-```bash
-docker-compose logs -f supabase
-```
-
-### Stop Supabase
-
-```bash
-docker-compose down
-```
-
-### Restart Supabase
-
-```bash
-docker-compose restart
-```
-
-### Access PostgreSQL Directly
-
-```bash
-docker exec -it vibetale_supabase psql -U postgres -d vibetale
-```
+1. Repoyu klonla
+2. `pip install -r requirements.txt`
+3. `.env` dosyasını oluştur ve Supabase Cloud bilgilerini doldur
+4. `uvicorn main:app --port 8000 --reload`
 
 ## Troubleshooting
 
-### Port Already in Use
+**`Invalid API key` hatası**  
+→ `.env` içindeki `SUPABASE_KEY` veya `SUPABASE_SERVICE_KEY` yanlış. Dashboard'dan yeniden kopyala.
 
-If port 8000 or 5432 is already in use, modify the ports in `docker-compose.yml`.
+**`relation "public.users" does not exist`**  
+→ SQL migration henüz çalıştırılmamış. Adım 3'ü tekrarla.
 
-### Permission Issues
+**`Bucket not found: media-assets`**  
+→ Storage bucket oluşturulmamış. Adım 4'teki SQL'i çalıştır.
 
-Ensure the `./supabase/data` directory has proper permissions:
-
-```bash
-mkdir -p supabase/data
-chmod 777 supabase/data
-```
-
-### Container Won't Start
-
-Check the logs for errors:
-
-```bash
-docker-compose logs supabase
-```
-
-## Production Considerations
-
-For production deployment:
-- Use strong, randomly generated passwords and keys
-- Enable SSL/TLS
-- Set up regular backups
-- Configure proper resource limits
-- Use a managed Supabase instance instead of Docker
-- Enable Row Level Security (RLS) policies (already included in schema)
+**RLS politikaları erişimi engelliyor**  
+→ Backend'den yapılan admin işlemleri için `SUPABASE_KEY` yerine `SUPABASE_SERVICE_KEY` kullan (service role RLS'yi atlar).

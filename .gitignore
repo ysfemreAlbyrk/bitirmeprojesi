@@ -96,7 +96,13 @@ dmypy.json
 # Local configuration
 local_config.py
 
+# Supabase local Docker volumes (artık cloud kullanılıyor)
+volumes/
+
+# Yerel Supabase yardımcı scriptleri
+generate_keys.py
+
 # Supabase Docker volumes (DB data & generated media — never commit)
-volumes/db/
-volumes/storage/
+# volumes/db/
+# volumes/storage/
 # volumes/api/ is intentionally tracked (contains kong.yml)

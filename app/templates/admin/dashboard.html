@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeTale Admin Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+        header {
+            background: #1e293b;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        header h1 { font-size: 1.5rem; color: #38bdf8; }
+        .refresh-badge {
+            background: #334155;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+        .card h3 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card .value { font-size: 2rem; font-weight: 700; }
+        .card .value.pending { color: #f59e0b; }
+        .card .value.processing { color: #3b82f6; }
+        .card .value.completed { color: #22c55e; }
+        .card .value.failed { color: #ef4444; }
+        .card .value.total { color: #e2e8f0; }
+
+        .panel {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .panel h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #38bdf8; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+        th { color: #94a3b8; font-weight: 600; }
+        .status-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-pending { background: #78350f; color: #fbbf24; }
+        .status-processing { background: #1e3a8a; color: #60a5fa; }
+        .status-completed { background: #14532d; color: #4ade80; }
+        .status-failed { background: #7f1d1d; color: #f87171; }
+
+        .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+        .health-item {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .health-icon { font-size: 1.25rem; }
+        .health-ok { color: #22c55e; }
+        .health-fail { color: #ef4444; }
+        .health-label { font-size: 0.85rem; color: #94a3b8; }
+        .health-value { font-weight: 600; }
+
+        .log-panel {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+        .log-line { margin-bottom: 0.25rem; white-space: pre-wrap; word-break: break-all; }
+        .log-error { color: #f87171; }
+        .log-warn { color: #fbbf24; }
+        .log-info { color: #60a5fa; }
+
+        .env-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
+        .env-row { display: flex; justify-content: space-between; font-size: 0.85rem; }
+        .env-key { color: #94a3b8; }
+        .env-val { font-family: monospace; color: #38bdf8; }
+
+        .gpu-bar { background: #334155; height: 8px; border-radius: 4px; margin-top: 0.5rem; overflow: hidden; }
+        .gpu-bar-fill { background: #3b82f6; height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .gpu-text { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #334155;
+            border-top-color: #38bdf8;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-left: 0.5rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-msg { color: #ef4444; padding: 1rem; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>VibeTale Admin Dashboard</h1>
+        <span class="refresh-badge">Auto-refresh: <span id="timer">30</span>s <span class="spinner" id="spinner" style="display:none;"></span></span>
+    </header>
+
+    <div class="container">
+        <!-- Stats Cards -->
+        <div class="grid" id="stats-grid">
+            <div class="card"><h3>Total Books</h3><div class="value total" id="stat-total">-</div></div>
+            <div class="card"><h3>Pending</h3><div class="value pending" id="stat-pending">-</div></div>
+            <div class="card"><h3>Processing</h3><div class="value processing" id="stat-processing">-</div></div>
+            <div class="card"><h3>Completed</h3><div class="value completed" id="stat-completed">-</div></div>
+            <div class="card"><h3>Failed</h3><div class="value failed" id="stat-failed">-</div></div>
+            <div class="card"><h3>Total Chunks</h3><div class="value total" id="stat-chunks">-</div></div>
+        </div>
+
+        <!-- Recent Books -->
+        <div class="panel">
+            <h2>Recent Books</h2>
+            <table>
+                <thead><tr><th>Title</th><th>Status</th><th>Audit</th><th>Upload Date</th></tr></thead>
+                <tbody id="books-tbody"><tr><td colspan="4" style="text-align:center;color:#64748b;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- Health Panel -->
+        <div class="panel">
+            <h2>System Health</h2>
+            <div class="health-grid" id="health-grid">Loading...</div>
+        </div>
+
+        <!-- GPU Panel -->
+        <div class="panel">
+            <h2>GPU / VRAM</h2>
+            <div id="gpu-panel">Loading...</div>
+        </div>
+
+        <!-- Logs Panel -->
+        <div class="panel">
+            <h2>Recent Errors</h2>
+            <div class="log-panel" id="log-panel">Loading...</div>
+        </div>
+
+        <!-- Environment Panel -->
+        <div class="panel">
+            <h2>Active Configuration</h2>
+            <div class="env-info" id="env-panel">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_KEY = new URLSearchParams(window.location.search).get('key') || '';
+        const HEADERS = ADMIN_KEY ? {'X-Admin-Key': ADMIN_KEY} : {};
+        const API_BASE = '/admin/api';
+
+        async function fetchJSON(endpoint) {
+            const url = `${API_BASE}${endpoint}${ADMIN_KEY ? (endpoint.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(ADMIN_KEY) : ''}`;
+            const res = await fetch(url, {headers: HEADERS});
+            if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+            return res.json();
+        }
+
+        async function loadStats() {
+            const data = await fetchJSON('/stats');
+            document.getElementById('stat-total').textContent = data.total_books ?? '-';
+            document.getElementById('stat-pending').textContent = data.pending ?? '-';
+            document.getElementById('stat-processing').textContent = data.processing ?? '-';
+            document.getElementById('stat-completed').textContent = data.completed ?? '-';
+            document.getElementById('stat-failed').textContent = data.failed ?? '-';
+            document.getElementById('stat-chunks').textContent = data.total_chunks ?? '-';
+        }
+
+        async function loadBooks() {
+            const data = await fetchJSON('/books?limit=10');
+            const tbody = document.getElementById('books-tbody');
+            if (!data.books || data.books.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;">No books found</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.books.map(b => {
+                const statusClass = `status-${b.processing_status}`;
+                return `<tr>
+                    <td>${b.title || 'Untitled'}</td>
+                    <td><span class="status-badge ${statusClass}">${b.processing_status}</span></td>
+                    <td>${b.audit_result || '-'}</td>
+                    <td>${b.upload_date ? new Date(b.upload_date).toLocaleString() : '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function loadHealth() {
+            const data = await fetchJSON('/health');
+            const grid = document.getElementById('health-grid');
+            const services = [
+                {key: 'llm_provider', label: 'LLM Provider'},
+                {key: 'audio_provider', label: 'Audio Provider'},
+                {key: 'image_provider', label: 'Image Provider'},
+                {key: 'supabase', label: 'Supabase DB'},
+                {key: 'redis', label: 'Redis'},
+                {key: 'celery_broker', label: 'Celery Broker'},
+            ];
+            grid.innerHTML = services.map(s => {
+                const ok = data[s.key]?.available;
+                const name = data[s.key]?.name || '';
+                return `<div class="health-item">
+                    <span class="health-icon ${ok ? 'health-ok' : 'health-fail'}">${ok ? '✅' : '❌'}</span>
+                    <div>
+                        <div class="health-label">${s.label}</div>
+                        <div class="health-value">${name || (ok ? 'Online' : 'Offline')}</div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function loadGPU() {
+            const data = await fetchJSON('/gpu');
+            const panel = document.getElementById('gpu-panel');
+            if (!data.available) {
+                panel.innerHTML = `<div style="color:#94a3b8;">${data.message || data.error || 'GPU unavailable'}</div>`;
+                return;
+            }
+            const pct = Math.round((data.reserved_gb / data.total_gb) * 100);
+            panel.innerHTML = `
+                <div style="font-weight:600;margin-bottom:0.5rem;">${data.device}</div>
+                <div class="gpu-bar"><div class="gpu-bar-fill" style="width:${pct}%"></div></div>
+                <div class="gpu-text">${data.reserved_gb} / ${data.total_gb} GB used (${pct}%)</div>
+                <div class="gpu-text">Allocated: ${data.allocated_gb} GB | Free: ${data.free_gb} GB</div>
+            `;
+        }
+
+        async function loadLogs() {
+            const data = await fetchJSON('/logs?lines=30');
+            const panel = document.getElementById('log-panel');
+            const lines = data.errors && data.errors.length ? data.errors : (data.main || []);
+            if (!lines.length) {
+                panel.innerHTML = '<div style="color:#64748b;">No logs found</div>';
+                return;
+            }
+            panel.innerHTML = lines.map(line => {
+                let cls = 'log-info';
+                if (line.includes('ERROR') || line.includes('CRITICAL')) cls = 'log-error';
+                else if (line.includes('WARNING')) cls = 'log-warn';
+                return `<div class="log-line ${cls}">${line.replace(/</g, '&lt;')}</div>`;
+            }).join('');
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        async function loadEnv() {
+            try {
+                const health = await fetchJSON('/health');
+                const panel = document.getElementById('env-panel');
+                const cfg = [
+                    {k: 'LLM Provider', v: health.llm_provider?.name || '?'},
+                    {k: 'Audio Model', v: health.audio_provider?.name || '?'},
+                    {k: 'Image Model', v: health.image_provider?.name || '?'},
+                    {k: 'Supabase', v: health.supabase?.available ? 'Connected' : 'Disconnected'},
+                    {k: 'Redis', v: health.redis?.available ? 'Connected' : 'Disconnected'},
+                ];
+                panel.innerHTML = cfg.map(r => `<div class="env-row"><span class="env-key">${r.k}</span><span class="env-val">${r.v}</span></div>`).join('');
+            } catch (e) {
+                document.getElementById('env-panel').innerHTML = `<div class="error-msg">${e.message}</div>`;
+            }
+        }
+
+        async function refreshAll() {
+            const spinner = document.getElementById('spinner');
+            spinner.style.display = 'inline-block';
+            try {
+                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadLogs(), loadEnv()]);
+            } catch (e) {
+                console.error('Refresh failed:', e);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        let countdown = 30;
+        setInterval(() => {
+            countdown--;
+            if (countdown <= 0) {
+                countdown = 30;
+                refreshAll();
+            }
+            document.getElementById('timer').textContent = countdown;
+        }, 1000);
+
+        refreshAll();
+    </script>
+</body>
+</html>

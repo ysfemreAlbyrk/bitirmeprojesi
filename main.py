@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
 from config import settings
 from app.utils.logger import setup_logger
 
-from app.api import books, reading, ambiance
-from app.middleware.rate_limit import limiter
+from app.api import books, reading, ambiance, admin
+from app.middleware.rate_limit import limiter, custom_rate_limit_handler
 
 # Setup logging
 logger = setup_logger("vibetale")
@@ -15,8 +16,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add rate limiter to state
+# Add rate limiter to state and register exception handler
 app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
 
 # CORS middleware for Flutter mobile app
 app.add_middleware(
@@ -31,6 +33,7 @@ app.add_middleware(
 app.include_router(books.router)
 app.include_router(reading.router)
 app.include_router(ambiance.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

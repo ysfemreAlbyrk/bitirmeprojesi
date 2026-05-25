@@ -13,13 +13,14 @@ from app.tasks.book_tasks import process_book_async
 logger = get_logger("vibetale")
 
 from app.models.book import Book, BookCreate, BookResponse, ProcessingStatus
-from app.core.database import BookRepository
+from app.core.database import BookRepository, TextChunkRepository
 from app.services.book_processing_service import BookProcessingService
 from app.core.storage import StorageService
 from app.core.dependencies import (
     get_book_processing_service,
     get_book_repository,
-    get_storage_service
+    get_storage_service,
+    get_text_chunk_repository
 )
 from config import settings
 
@@ -168,7 +169,9 @@ async def get_book_status(
 @router.delete("/{book_id}")
 async def delete_book(
     book_id: str,
-    book_repo: BookRepository = Depends(get_book_repository)
+    book_repo: BookRepository = Depends(get_book_repository),
+    chunk_repo: TextChunkRepository = Depends(get_text_chunk_repository),
+    storage_service: StorageService = Depends(get_storage_service)
 ):
     """
     Delete a book and all associated media.
@@ -178,7 +181,22 @@ async def delete_book(
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     
-    # Delete book record (cascade delete should handle related records in production)
+    # Fetch all chunks to clean up associated media files from storage
+    chunks = chunk_repo.get_by_book(book_id)
+    deleted_media = 0
+    for chunk in chunks:
+        for field in ('audio_url', 'image_url'):
+            url = chunk.get(field)
+            if url:
+                try:
+                    object_name = url.split('/')[-1]
+                    await storage_service.delete_file(object_name)
+                    deleted_media += 1
+                except Exception as e:
+                    logger.warning(f"Failed to delete {field} for chunk {chunk['id']}: {e}")
+    logger.info(f"Deleted {deleted_media} media assets for book {book_id}")
+    
+    # Delete book record (DB cascade handles chapters, chunks, bookmarks, progress)
     success = book_repo.delete(book_id)
     
     if success:

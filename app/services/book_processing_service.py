@@ -1,4 +1,5 @@
 """Book processing service - orchestrates the entire book processing pipeline"""
+import uuid
 from typing import Optional
 from app.models.book import Book, ProcessingStatus, AuditResult
 from app.core.database import BookRepository, ChapterRepository, TextChunkRepository
@@ -9,12 +10,6 @@ from app.services.semantic_splitter import SemanticSplitter
 from app.providers.llm_provider import LLMProvider
 from app.providers.audio_provider import AudioGenerationProvider
 from app.providers.image_provider import ImageGenerationProvider
-from app.core.database import BookRepository, ChapterRepository, TextChunkRepository
-from app.core.storage import StorageService
-from app.services.semantic_splitter import SemanticSplitter
-from app.services.audit_service import AuditService
-from app.utils.text_extraction import TextExtractor
-from app.models.book import ProcessingStatus, AuditResult
 from config import settings
 from app.utils.logger import get_logger
 
@@ -138,7 +133,7 @@ class BookProcessingService:
                         negative_prompt="music, speech, noise, distortion"
                     )
                     audio_url = await self.storage_service.upload_file(audio_path)
-                    await self.chunk_repo.update(chunk_id, audio_url=audio_url)
+                    self.chunk_repo.update(chunk_id, {'audio_url': audio_url})
                 
                 # Step 7: Generate image
                 if analysis.image_prompt:
@@ -149,10 +144,10 @@ class BookProcessingService:
                         height=512
                     )
                     image_url = await self.storage_service.upload_file(image_path)
-                    await self.chunk_repo.update(chunk_id, image_url=image_url)
+                    self.chunk_repo.update(chunk_id, {'image_url': image_url})
                 
                 # Step 8: Update chunk with analysis and media URLs
-                await self.chunk_repo.update(chunk_id, {
+                self.chunk_repo.update(chunk_id, {
                     'scene': analysis.scene,
                     'emotion': analysis.emotion,
                     'sfx_prompt': analysis.sfx_prompt,

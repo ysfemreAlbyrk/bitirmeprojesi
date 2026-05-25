@@ -2,13 +2,13 @@
 from fastapi import Depends
 from typing import AsyncGenerator
 
-from app.core.database import Database, BookRepository, ChapterRepository, TextChunkRepository
+from app.core.database import Database, BookRepository, ChapterRepository, TextChunkRepository, ReadingProgressRepository
 from app.core.storage import StorageService
 from app.providers.llm_provider import LLMProvider
 from app.providers.audio_provider import AudioGenerationProvider
 from app.providers.image_provider import ImageGenerationProvider
 from app.providers.gemini_provider import GeminiProvider
-from app.providers.mmaudio_provider import MMAudioProvider
+from app.providers.stable_audio_provider import StableAudioProvider
 from app.providers.local_image_provider import LocalImageProvider
 from app.services.audit_service import AuditService
 from app.services.semantic_splitter import SemanticSplitter
@@ -48,7 +48,7 @@ def get_audio_provider() -> AudioGenerationProvider:
     """Get or create audio provider singleton instance"""
     global _audio_provider
     if _audio_provider is None:
-        _audio_provider = MMAudioProvider()
+        _audio_provider = StableAudioProvider()
     return _audio_provider
 
 
@@ -92,6 +92,13 @@ def get_text_chunk_repository(
 ) -> TextChunkRepository:
     """Get text chunk repository instance"""
     return TextChunkRepository(db)
+
+
+def get_reading_progress_repository(
+    db: Database = Depends(get_database)
+) -> ReadingProgressRepository:
+    """Get reading progress repository instance"""
+    return ReadingProgressRepository(db)
 
 
 def get_audit_service(

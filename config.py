@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama2"
     
-    # MMAudio Configuration
-    mmaudio_path: str = "~/mm/MMAudio"
+    # Stable Audio 3 Configuration
+    stable_audio_model: str = "small-sfx"
     
     # Image Generation Configuration
     image_generation_model: str = "clipdrop"  # Options: clipdrop, local
@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_storage: str = "memory"  # Options: memory, redis
     
+    # Admin Dashboard Configuration
+    admin_dashboard_enabled: bool = True
+    admin_dashboard_key: str = "change-me-in-production"
+
     # Celery Configuration
     celery_broker_url: str = ""
     celery_result_backend: str = ""

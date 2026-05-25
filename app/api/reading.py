@@ -1,9 +1,11 @@
 """Reading progress and session API endpoints"""
+import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate
-from app.core.database import ReadingProgressRepository, BookRepository, TextChunkRepository
-from app.core.dependencies import get_reading_progress_repository, get_book_repository, get_text_chunk_repository
-from app.utils.pagination import PaginatedResponse, PaginationParams
+from app.core.database import Database, ReadingProgressRepository, BookRepository, TextChunkRepository
+from app.core.dependencies import get_database, get_reading_progress_repository, get_book_repository, get_text_chunk_repository
+from app.utils.pagination import PaginatedResponse, PaginationParams, paginate
 
 router = APIRouter(prefix="/reading", tags=["reading"])
 
@@ -66,7 +68,7 @@ async def create_bookmark(
     """
     bookmark_data = bookmark.model_dump()
     bookmark_data['id'] = str(uuid.uuid4())
-    bookmark_data['created_at'] = str(uuid.uuid4())  # Simplified - use datetime in production
+    bookmark_data['created_at'] = datetime.now().isoformat()
     
     response = db.client.table('bookmarks').insert(bookmark_data).execute()
     

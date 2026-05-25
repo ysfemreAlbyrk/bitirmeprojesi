@@ -1,4 +1,5 @@
 """Celery tasks for book processing"""
+import asyncio
 from celery import shared_task
 from app.services.book_processing_service import BookProcessingService
 from app.core.dependencies import get_book_processing_service
@@ -23,12 +24,12 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
         # Get book processing service
         processing_service = get_book_processing_service()
         
-        # Process the book
-        processing_service.process_book(
+        # Process the book (async method wrapped for sync Celery context)
+        asyncio.run(processing_service.process_book(
             book_id=book_id,
             file_path=file_path,
             file_format=file_format
-        )
+        ))
         
         logger.info(f"Book processing completed successfully: {book_id}")
         return {"status": "completed", "book_id": book_id}

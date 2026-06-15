@@ -29,7 +29,7 @@ class ImageGenerationProvider(ABC):
         pass
     
     @abstractmethod
-    async def is_available(self) -> bool:
+    def is_available(self) -> bool:
         """
         Check if the image generation service is available.
         

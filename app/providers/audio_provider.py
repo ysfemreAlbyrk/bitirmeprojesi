@@ -27,7 +27,7 @@ class AudioGenerationProvider(ABC):
         pass
     
     @abstractmethod
-    async def is_available(self) -> bool:
+    def is_available(self) -> bool:
         """
         Check if the audio generation service is available.
         

@@ -82,7 +82,7 @@ class LocalImageProvider(ImageGenerationProvider):
         except Exception as e:
             raise RuntimeError(f"Image generation failed: {str(e)}")
     
-    async def is_available(self) -> bool:
+    def is_available(self) -> bool:
         """
         Check if the image generation service is available.
         

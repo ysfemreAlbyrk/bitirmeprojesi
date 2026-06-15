@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
-from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate
+from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate, ReadingSessionCreate, ReadingSessionUpdate
 from app.core.database import Database, ReadingProgressRepository, BookRepository, TextChunkRepository
 from app.core.dependencies import get_database, get_reading_progress_repository, get_book_repository, get_text_chunk_repository
 from app.core.auth import get_current_user_id
@@ -12,6 +12,47 @@ router = APIRouter(prefix="/reading", tags=["reading"])
 
 
 @router.get("/progress/{book_id}")
+@router.post("/sessions")
+async def create_reading_session(
+    session: ReadingSessionCreate,
+    db: Database = Depends(get_database)
+):
+    """Start a new reading session."""
+    session_data = session.model_dump()
+    session_data['id'] = str(uuid.uuid4())
+    response = db.client.table('reading_sessions').insert(session_data).execute()
+    if response.data:
+        return response.data[0]
+    raise HTTPException(status_code=500, detail="Failed to create reading session")
+
+
+@router.put("/sessions/{session_id}")
+async def update_reading_session(
+    session_id: str,
+    update: ReadingSessionUpdate,
+    db: Database = Depends(get_database)
+):
+    """End or update a reading session."""
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    response = db.client.table('reading_sessions').update(update_data).eq('id', session_id).execute()
+    if response.data:
+        return response.data[0]
+    raise HTTPException(status_code=404, detail="Reading session not found")
+
+
+@router.get("/sessions/{user_id}")
+async def list_reading_sessions(
+    user_id: str,
+    db: Database = Depends(get_database)
+):
+    """List all reading sessions for a user."""
+    response = db.client.table('reading_sessions').select('*').eq('user_id', user_id).order('started_at', desc=True).execute()
+    return {"sessions": response.data or []}
+
+
+@router.get("/progress/{user_id}/{book_id}")
 async def get_reading_progress(
     book_id: str,
     user_id: str = Depends(get_current_user_id),

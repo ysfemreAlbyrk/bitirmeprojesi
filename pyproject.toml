@@ -1,3 +1,51 @@
+[project]
+name = "bitirmeprojesi"
+version = "0.1.0"
+description = "Bitirme projesi backend"
+requires-python = ">=3.10, <3.14"
+dependencies = [
+    "fastapi[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "python-multipart",
+    "supabase",
+    "google-genai",
+    "ebooklib",
+    "pypdf",
+    "python-docx",
+    "aiofiles",
+    "httpx",
+    "python-dotenv",
+    "beautifulsoup4",
+    "diffusers",
+    "transformers",
+    "accelerate",
+    "requests",
+    "redis",
+    "hiredis",
+    "python-magic",
+    "python-magic-bin; sys_platform == 'win32' or sys_platform == 'darwin'",
+    "slowapi",
+    "celery",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-mock",
+    "torchaudio",
+    "stable-audio-3",
+    "psutil",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv.sources]
+stable-audio-3 = { path = "stable-audio-3", editable = true }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

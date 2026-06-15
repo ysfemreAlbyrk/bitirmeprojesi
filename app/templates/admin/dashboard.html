@@ -6,173 +6,165 @@
     <title>VibeTale Admin Dashboard</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            line-height: 1.6;
-        }
-        header {
-            background: #1e293b;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        header h1 { font-size: 1.5rem; color: #38bdf8; }
-        .refresh-badge {
-            background: #334155;
-            padding: 0.25rem 0.75rem;
-            border-radius: 999px;
-            font-size: 0.8rem;
-            color: #94a3b8;
-        }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .card {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-        }
-        .card h3 { font-size: 0.9rem; color: #94a3b8; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
-        .card .value { font-size: 2rem; font-weight: 700; }
-        .card .value.pending { color: #f59e0b; }
-        .card .value.processing { color: #3b82f6; }
-        .card .value.completed { color: #22c55e; }
-        .card .value.failed { color: #ef4444; }
-        .card .value.total { color: #e2e8f0; }
+        :root { --bg:#09090b; --card:#18181b; --border:#27272a; --muted:#27272a; --fg:#fafafa; --muted-fg:#a1a1aa; --accent:#27272a; --radius:0.75rem; }
+        body { font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; font-size:14px; -webkit-font-smoothing:antialiased; }
+        header { padding:1.25rem 2rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:baseline; background:var(--bg); position:sticky; top:0; z-index:50; }
+        header h1 { font-size:1.25rem; font-weight:600; letter-spacing:-0.025em; }
+        .meta { color:var(--muted-fg); font-size:0.8rem; font-variant-numeric:tabular-nums; }
+        .container { max-width:1280px; margin:0 auto; padding:2rem; display:flex; flex-direction:column; gap:1.5rem; }
 
-        .panel {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        .panel h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #38bdf8; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { text-align: left; padding: 0.75rem; border-bottom: 1px solid #334155; font-size: 0.9rem; }
-        th { color: #94a3b8; font-weight: 600; }
-        .status-badge {
-            display: inline-block;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.375rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        .status-pending { background: #78350f; color: #fbbf24; }
-        .status-processing { background: #1e3a8a; color: #60a5fa; }
-        .status-completed { background: #14532d; color: #4ade80; }
-        .status-failed { background: #7f1d1d; color: #f87171; }
+        .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:0 1px 2px 0 rgba(0,0,0,0.05); }
+        .card-h { padding:1.25rem 1.5rem; border-bottom:1px solid var(--border); }
+        .card-t { font-size:0.95rem; font-weight:600; }
+        .card-d { font-size:0.8rem; color:var(--muted-fg); margin-top:0.25rem; }
+        .card-c { padding:1.5rem; }
 
-        .health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
-        .health-item {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .health-icon { font-size: 1.25rem; }
-        .health-ok { color: #22c55e; }
-        .health-fail { color: #ef4444; }
-        .health-label { font-size: 0.85rem; color: #94a3b8; }
-        .health-value { font-weight: 600; }
+        .s-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1rem; }
+        .s-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; }
+        .s-lbl { font-size:0.75rem; color:var(--muted-fg); margin-bottom:0.5rem; }
+        .s-val { font-size:1.75rem; font-weight:700; letter-spacing:-0.02em; }
+        .s-val.pend{color:#eab308;} .s-val.proc{color:#22d3ee;} .s-val.done{color:#4ade80;} .s-val.fail{color:#f87171;}
 
-        .log-panel {
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            max-height: 300px;
-            overflow-y: auto;
-            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
-            font-size: 0.8rem;
-            line-height: 1.5;
-        }
-        .log-line { margin-bottom: 0.25rem; white-space: pre-wrap; word-break: break-all; }
-        .log-error { color: #f87171; }
-        .log-warn { color: #fbbf24; }
-        .log-info { color: #60a5fa; }
+        .tw { width:100%; overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; font-size:0.875rem; }
+        thead { background:var(--muted); }
+        th { text-align:left; padding:0.75rem 1rem; color:var(--muted-fg); font-weight:500; font-size:0.8rem; }
+        td { padding:0.875rem 1rem; border-bottom:1px solid var(--border); vertical-align:middle; }
+        tbody tr:last-child td { border-bottom:none; }
+        tbody tr.click:hover { background:var(--accent); cursor:pointer; transition:background .15s; }
 
-        .env-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.75rem; }
-        .env-row { display: flex; justify-content: space-between; font-size: 0.85rem; }
-        .env-key { color: #94a3b8; }
-        .env-val { font-family: monospace; color: #38bdf8; }
+        .badge { display:inline-flex; align-items:center; border-radius:9999px; padding:0.125rem 0.625rem; font-size:0.75rem; font-weight:500; text-transform:capitalize; }
+        .b-pend{background:rgba(234,179,8,0.15);color:#eab308;} .b-proc{background:rgba(34,211,238,0.15);color:#22d3ee;} .b-done{background:rgba(74,222,128,0.15);color:#4ade80;} .b-fail{background:rgba(248,113,113,0.15);color:#f87171;}
 
-        .gpu-bar { background: #334155; height: 8px; border-radius: 4px; margin-top: 0.5rem; overflow: hidden; }
-        .gpu-bar-fill { background: #3b82f6; height: 100%; border-radius: 4px; transition: width 0.3s; }
-        .gpu-text { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }
+        .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:0.375rem; font-size:0.875rem; font-weight:500; padding:0.5rem 1rem; border:1px solid var(--border); background:transparent; color:var(--muted-fg); cursor:pointer; transition:all .15s; }
+        .btn:hover { background:var(--accent); color:var(--fg); }
+        .btn-g { padding:0.375rem 0.625rem; border:none; color:var(--muted-fg); background:transparent; border-radius:0.375rem; cursor:pointer; transition:all .15s; }
+        .btn-g:hover { color:#f87171; background:rgba(248,113,113,0.1); }
+        .btn-sm { padding:0.25rem 0.75rem; font-size:0.75rem; }
 
-        .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid #334155;
-            border-top-color: #38bdf8;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            vertical-align: middle;
-            margin-left: 0.5rem;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        .prog { background:var(--muted); height:8px; border-radius:4px; overflow:hidden; }
+        .prog-f { height:100%; border-radius:4px; transition:width .5s ease; background:var(--fg); }
+        .prog-t { display:flex; justify-content:space-between; font-size:0.75rem; color:var(--muted-fg); margin-top:0.375rem; }
 
-        .error-msg { color: #ef4444; padding: 1rem; }
+        .h-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.75rem; }
+        .h-card { background:var(--muted); border:1px solid var(--border); border-radius:var(--radius); padding:1rem; display:flex; flex-direction:column; gap:0.375rem; }
+        .h-lbl { font-size:0.75rem; color:var(--muted-fg); text-transform:uppercase; letter-spacing:0.05em; }
+        .h-val { font-size:0.875rem; font-weight:500; }
+        .h-val.ok{color:#4ade80;} .h-val.down{color:#f87171;}
+
+        .log { background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:1rem; max-height:260px; overflow-y:auto; font-family:ui-monospace,"SF Mono",monospace; font-size:0.8rem; line-height:1.6; }
+        .l-line { padding:0.15rem 0; white-space:pre-wrap; word-break:break-all; }
+        .l-err{color:#f87171;} .l-warn{color:#facc15;} .l-info{color:#60a5fa;}
+
+        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; }
+        @media (max-width:900px){ .grid2{grid-template-columns:1fr;} .s-grid{grid-template-columns:repeat(3,1fr);} }
+
+        .dlg-o { position:fixed; inset:0; background:rgba(0,0,0,0.7); display:none; align-items:center; justify-content:center; z-index:100; backdrop-filter:blur(6px); }
+        .dlg-o.open { display:flex; }
+        .dlg { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:0 25px 50px -12px rgba(0,0,0,0.5); width:92%; max-width:600px; max-height:85vh; overflow-y:auto; }
+        .dlg-h { padding:1.25rem 1.5rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+        .dlg-t { font-size:1rem; font-weight:600; }
+        .dlg-x { background:none; border:none; color:var(--muted-fg); font-size:1.25rem; cursor:pointer; border-radius:0.25rem; padding:0.25rem; }
+        .dlg-x:hover { color:var(--fg); background:var(--accent); }
+        .dlg-b { padding:1.5rem; }
+
+        .kv { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; font-size:0.875rem; margin-bottom:1rem; }
+        .kv-row { display:flex; justify-content:space-between; padding:0.5rem 0; border-bottom:1px solid var(--border); }
+        .kv-k { color:var(--muted-fg); } .kv-v { color:#d4d4d8; font-variant-numeric:tabular-nums; }
+        .sub { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted-fg); margin:1rem 0 0.5rem; }
+        .list { max-height:180px; overflow-y:auto; font-size:0.875rem; }
+        .li { padding:0.5rem 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; }
+        .li span:first-child { color:var(--muted-fg); }
+
+        .empty { text-align:center; color:#52525b; padding:2rem; font-size:0.875rem; }
+        .spin { display:inline-block; width:12px; height:12px; border:2px solid var(--border); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; vertical-align:middle; margin-left:0.5rem; }
+        @keyframes spin { to { transform:rotate(360deg); } }
     </style>
 </head>
 <body>
     <header>
-        <h1>VibeTale Admin Dashboard</h1>
-        <span class="refresh-badge">Auto-refresh: <span id="timer">30</span>s <span class="spinner" id="spinner" style="display:none;"></span></span>
+        <h1>VibeTale</h1>
+        <span class="meta">admin / <span id="timer">30</span>s <span class="spin" id="spinner" style="display:none;"></span></span>
     </header>
 
     <div class="container">
-        <!-- Stats Cards -->
-        <div class="grid" id="stats-grid">
-            <div class="card"><h3>Total Books</h3><div class="value total" id="stat-total">-</div></div>
-            <div class="card"><h3>Pending</h3><div class="value pending" id="stat-pending">-</div></div>
-            <div class="card"><h3>Processing</h3><div class="value processing" id="stat-processing">-</div></div>
-            <div class="card"><h3>Completed</h3><div class="value completed" id="stat-completed">-</div></div>
-            <div class="card"><h3>Failed</h3><div class="value failed" id="stat-failed">-</div></div>
-            <div class="card"><h3>Total Chunks</h3><div class="value total" id="stat-chunks">-</div></div>
+        <div class="s-grid">
+            <div class="s-card"><div class="s-lbl">Total Books</div><div class="s-val" id="s-total">-</div></div>
+            <div class="s-card"><div class="s-lbl">Pending</div><div class="s-val pend" id="s-pend">-</div></div>
+            <div class="s-card"><div class="s-lbl">Processing</div><div class="s-val proc" id="s-proc">-</div></div>
+            <div class="s-card"><div class="s-lbl">Completed</div><div class="s-val done" id="s-done">-</div></div>
+            <div class="s-card"><div class="s-lbl">Failed</div><div class="s-val fail" id="s-fail">-</div></div>
+            <div class="s-card"><div class="s-lbl">Users</div><div class="s-val" id="s-users">-</div></div>
         </div>
 
-        <!-- Recent Books -->
-        <div class="panel">
-            <h2>Recent Books</h2>
-            <table>
-                <thead><tr><th>Title</th><th>Status</th><th>Audit</th><th>Upload Date</th></tr></thead>
-                <tbody id="books-tbody"><tr><td colspan="4" style="text-align:center;color:#64748b;">Loading...</td></tr></tbody>
-            </table>
+        <div class="card">
+            <div class="card-h"><div class="card-t">Books</div><div class="card-d">Recent uploads</div></div>
+            <div class="card-c">
+                <div class="tw">
+                    <table>
+                        <thead><tr><th>Title</th><th>Status</th><th>Format</th><th>Audit</th><th>Uploaded</th><th style="width:1%"></th></tr></thead>
+                        <tbody id="books-tbody"><tr><td colspan="6" class="empty">Loading</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-        <!-- Health Panel -->
-        <div class="panel">
-            <h2>System Health</h2>
-            <div class="health-grid" id="health-grid">Loading...</div>
+        <div class="grid2">
+            <div class="card">
+                <div class="card-h"><div class="card-t">System Health</div><div class="card-d">Service status</div></div>
+                <div class="card-c"><div class="h-grid" id="health-grid"></div></div>
+            </div>
+            <div class="card">
+                <div class="card-h"><div class="card-t">Storage</div><div class="card-d">media-assets bucket</div></div>
+                <div class="card-c" id="storage-panel"></div>
+            </div>
         </div>
 
-        <!-- GPU Panel -->
-        <div class="panel">
-            <h2>GPU / VRAM</h2>
-            <div id="gpu-panel">Loading...</div>
+        <div class="grid2">
+            <div class="card">
+                <div class="card-h"><div class="card-t">GPU</div><div class="card-d">VRAM usage</div></div>
+                <div class="card-c" id="gpu-panel"></div>
+            </div>
+            <div class="card">
+                <div class="card-h"><div class="card-t">System</div><div class="card-d">CPU / RAM / Disk</div></div>
+                <div class="card-c" id="system-panel"></div>
+            </div>
         </div>
 
-        <!-- Logs Panel -->
-        <div class="panel">
-            <h2>Recent Errors</h2>
-            <div class="log-panel" id="log-panel">Loading...</div>
+        <div class="card">
+            <div class="card-h"><div class="card-t">Realtime</div><div class="card-d">CPU & RAM — last 60s</div></div>
+            <div class="card-c">
+                <canvas id="rt-canvas" width="1000" height="180" style="width:100%;height:180px;border-radius:6px;"></canvas>
+            </div>
         </div>
 
-        <!-- Environment Panel -->
-        <div class="panel">
-            <h2>Active Configuration</h2>
-            <div class="env-info" id="env-panel">Loading...</div>
+        <div class="card">
+            <div class="card-h"><div class="card-t">Celery</div><div class="card-d">Workers & tasks</div></div>
+            <div class="card-c" id="celery-panel"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-h"><div class="card-t">Users</div><div class="card-d">Recent registrations</div></div>
+            <div class="card-c">
+                <div class="tw">
+                    <table>
+                        <thead><tr><th>Email</th><th>Name</th><th>Created</th><th>Last Active</th></tr></thead>
+                        <tbody id="users-tbody"><tr><td colspan="4" class="empty">Loading</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-h"><div class="card-t">Logs</div><div class="card-d">Recent errors</div></div>
+            <div class="card-c"><div class="log" id="log-panel"></div></div>
+        </div>
+    </div>
+
+    <div class="dlg-o" id="book-modal">
+        <div class="dlg">
+            <div class="dlg-h"><div class="dlg-t" id="modal-title">Book</div><button class="dlg-x" onclick="closeModal()">&times;</button></div>
+            <div class="dlg-b" id="modal-body"></div>
         </div>
     </div>
 
@@ -190,111 +182,225 @@
 
         async function loadStats() {
             const data = await fetchJSON('/stats');
-            document.getElementById('stat-total').textContent = data.total_books ?? '-';
-            document.getElementById('stat-pending').textContent = data.pending ?? '-';
-            document.getElementById('stat-processing').textContent = data.processing ?? '-';
-            document.getElementById('stat-completed').textContent = data.completed ?? '-';
-            document.getElementById('stat-failed').textContent = data.failed ?? '-';
-            document.getElementById('stat-chunks').textContent = data.total_chunks ?? '-';
+            document.getElementById('s-total').textContent = data.total_books ?? '-';
+            document.getElementById('s-pend').textContent = data.pending ?? '-';
+            document.getElementById('s-proc').textContent = data.processing ?? '-';
+            document.getElementById('s-done').textContent = data.completed ?? '-';
+            document.getElementById('s-fail').textContent = data.failed ?? '-';
+            document.getElementById('s-users').textContent = data.total_users ?? '-';
         }
 
         async function loadBooks() {
             const data = await fetchJSON('/books?limit=10');
             const tbody = document.getElementById('books-tbody');
-            if (!data.books || data.books.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;">No books found</td></tr>';
+            if (!data.books || !data.books.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">No books</td></tr>';
                 return;
             }
-            tbody.innerHTML = data.books.map(b => {
-                const statusClass = `status-${b.processing_status}`;
-                return `<tr>
-                    <td>${b.title || 'Untitled'}</td>
-                    <td><span class="status-badge ${statusClass}">${b.processing_status}</span></td>
-                    <td>${b.audit_result || '-'}</td>
-                    <td>${b.upload_date ? new Date(b.upload_date).toLocaleString() : '-'}</td>
-                </tr>`;
-            }).join('');
+            const tmap = {pending:'b-pend', processing:'b-proc', completed:'b-done', failed:'b-fail'};
+            tbody.innerHTML = data.books.map(b => `<tr class="click" onclick="openBookModal('${b.id}')">
+                <td>${b.title || 'Untitled'}</td>
+                <td><span class="badge ${tmap[b.processing_status]||''}">${b.processing_status}</span></td>
+                <td>${b.file_format || '-'}</td>
+                <td>${b.audit_result || '-'}</td>
+                <td>${b.upload_date ? new Date(b.upload_date).toLocaleDateString() : '-'}</td>
+                <td><button class="btn-g" onclick="event.stopPropagation();deleteBook('${b.id}')">Delete</button></td>
+            </tr>`).join('');
+        }
+
+        async function openBookModal(id) {
+            document.getElementById('book-modal').classList.add('open');
+            const body = document.getElementById('modal-body');
+            body.innerHTML = '<div class="empty">Loading</div>';
+            try {
+                const d = await fetchJSON('/book/' + id);
+                const book = d.book || {};
+                document.getElementById('modal-title').textContent = book.title || 'Book';
+                const ch = (d.chapters || []).map(c => `<div class="li"><span>Ch.${c.chapter_number}</span><span>${c.title || ''}</span></div>`).join('') || '<div class="empty">No chapters</div>';
+                const md = (d.media || []).map(m => `<div class="li"><span>${m.media_type}</span><span>${m.storage_url ? '<a href="'+m.storage_url+'" target="_blank" style="color:#22d3ee;">view</a>' : '-'}</span></div>`).join('') || '<div class="empty">No media</div>';
+                body.innerHTML = `
+                    <div class="kv">
+                        <div class="kv-row"><span class="kv-k">ID</span><span class="kv-v">${book.id || '-'}</span></div>
+                        <div class="kv-row"><span class="kv-k">Status</span><span class="kv-v">${book.processing_status || '-'}</span></div>
+                        <div class="kv-row"><span class="kv-k">Format</span><span class="kv-v">${book.file_format || '-'}</span></div>
+                        <div class="kv-row"><span class="kv-k">Audit</span><span class="kv-v">${book.audit_result || '-'}</span></div>
+                        <div class="kv-row"><span class="kv-k">Chunks</span><span class="kv-v">${d.chunks?.length || 0}</span></div>
+                        <div class="kv-row"><span class="kv-k">Media</span><span class="kv-v">${d.media?.length || 0}</span></div>
+                    </div>
+                    <div class="sub">Chapters</div><div class="list">${ch}</div>
+                    <div class="sub">Media Assets</div><div class="list">${md}</div>
+                `;
+            } catch (e) {
+                body.innerHTML = '<div class="empty" style="color:#f87171;">Error: ' + e.message + '</div>';
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('book-modal').classList.remove('open');
+        }
+
+        async function deleteBook(id) {
+            if (!confirm('Delete book ' + id + '?')) return;
+            try {
+                const url = API_BASE + '/book/' + id + (ADMIN_KEY ? '?key=' + encodeURIComponent(ADMIN_KEY) : '');
+                const res = await fetch(url, {method: 'DELETE', headers: HEADERS});
+                if (!res.ok) throw new Error(await res.text());
+                refreshAll();
+            } catch (e) {
+                alert('Delete failed: ' + e.message);
+            }
         }
 
         async function loadHealth() {
-            const data = await fetchJSON('/health');
-            const grid = document.getElementById('health-grid');
-            const services = [
-                {key: 'llm_provider', label: 'LLM Provider'},
-                {key: 'audio_provider', label: 'Audio Provider'},
-                {key: 'image_provider', label: 'Image Provider'},
-                {key: 'supabase', label: 'Supabase DB'},
-                {key: 'redis', label: 'Redis'},
-                {key: 'celery_broker', label: 'Celery Broker'},
-            ];
-            grid.innerHTML = services.map(s => {
-                const ok = data[s.key]?.available;
-                const name = data[s.key]?.name || '';
-                return `<div class="health-item">
-                    <span class="health-icon ${ok ? 'health-ok' : 'health-fail'}">${ok ? '✅' : '❌'}</span>
-                    <div>
-                        <div class="health-label">${s.label}</div>
-                        <div class="health-value">${name || (ok ? 'Online' : 'Offline')}</div>
-                    </div>
-                </div>`;
+            const d = await fetchJSON('/health');
+            const g = document.getElementById('health-grid');
+            const sv = [{k:'llm_provider',l:'LLM'},{k:'audio_provider',l:'Audio'},{k:'image_provider',l:'Image'},{k:'supabase',l:'DB'},{k:'redis',l:'Redis'},{k:'celery_broker',l:'Celery'}];
+            g.innerHTML = sv.map(s => {
+                const ok = d[s.k]?.available;
+                let val = d[s.k]?.name || (ok ? 'up' : 'down');
+                if (s.k === 'celery_broker') {
+                    const wc = d[s.k]?.workers_online || 0;
+                    val = ok ? (wc > 0 ? wc + ' workers' : 'up (0 workers)') : 'down';
+                }
+                return `<div class="h-card"><div class="h-lbl">${s.l}</div><div class="h-val ${ok?'ok':'down'}">${val}</div></div>`;
             }).join('');
         }
 
         async function loadGPU() {
-            const data = await fetchJSON('/gpu');
-            const panel = document.getElementById('gpu-panel');
-            if (!data.available) {
-                panel.innerHTML = `<div style="color:#94a3b8;">${data.message || data.error || 'GPU unavailable'}</div>`;
-                return;
-            }
-            const pct = Math.round((data.reserved_gb / data.total_gb) * 100);
-            panel.innerHTML = `
-                <div style="font-weight:600;margin-bottom:0.5rem;">${data.device}</div>
-                <div class="gpu-bar"><div class="gpu-bar-fill" style="width:${pct}%"></div></div>
-                <div class="gpu-text">${data.reserved_gb} / ${data.total_gb} GB used (${pct}%)</div>
-                <div class="gpu-text">Allocated: ${data.allocated_gb} GB | Free: ${data.free_gb} GB</div>
-            `;
+            const d = await fetchJSON('/gpu');
+            const el = document.getElementById('gpu-panel');
+            if (!d.available) { el.innerHTML = '<div class="empty">' + (d.message || d.error || 'GPU unavailable') + '</div>'; return; }
+            const pct = Math.round((d.allocated_gb / d.total_gb) * 100);
+            el.innerHTML = '<div style="font-weight:500;margin-bottom:0.4rem;font-size:0.875rem;">' + d.device + '</div>' +
+                '<div class="prog"><div class="prog-f" style="width:' + pct + '%"></div></div>' +
+                '<div class="prog-t"><span>Allocated ' + d.allocated_gb + ' / ' + d.total_gb + ' GB</span><span>' + pct + '%</span></div>' +
+                '<div class="prog-t"><span>Reserved ' + d.reserved_gb + ' GB</span><span>Free ' + d.free_gb + ' GB</span></div>';
         }
 
         async function loadLogs() {
-            const data = await fetchJSON('/logs?lines=30');
-            const panel = document.getElementById('log-panel');
-            const lines = data.errors && data.errors.length ? data.errors : (data.main || []);
-            if (!lines.length) {
-                panel.innerHTML = '<div style="color:#64748b;">No logs found</div>';
-                return;
-            }
-            panel.innerHTML = lines.map(line => {
-                let cls = 'log-info';
-                if (line.includes('ERROR') || line.includes('CRITICAL')) cls = 'log-error';
-                else if (line.includes('WARNING')) cls = 'log-warn';
-                return `<div class="log-line ${cls}">${line.replace(/</g, '&lt;')}</div>`;
+            const d = await fetchJSON('/logs?lines=30');
+            const el = document.getElementById('log-panel');
+            const lines = d.errors?.length ? d.errors : (d.main || []);
+            if (!lines.length) { el.innerHTML = '<div class="empty">No logs</div>'; return; }
+            el.innerHTML = lines.map(ln => {
+                let c = 'l-info';
+                if (/ERROR|CRITICAL/.test(ln)) c = 'l-err';
+                else if (/WARNING/.test(ln)) c = 'l-warn';
+                return '<div class="l-line ' + c + '">' + ln.replace(/</g, '&lt;') + '</div>';
             }).join('');
-            panel.scrollTop = panel.scrollHeight;
+            el.scrollTop = el.scrollHeight;
         }
 
-        async function loadEnv() {
-            try {
-                const health = await fetchJSON('/health');
-                const panel = document.getElementById('env-panel');
-                const cfg = [
-                    {k: 'LLM Provider', v: health.llm_provider?.name || '?'},
-                    {k: 'Audio Model', v: health.audio_provider?.name || '?'},
-                    {k: 'Image Model', v: health.image_provider?.name || '?'},
-                    {k: 'Supabase', v: health.supabase?.available ? 'Connected' : 'Disconnected'},
-                    {k: 'Redis', v: health.redis?.available ? 'Connected' : 'Disconnected'},
-                ];
-                panel.innerHTML = cfg.map(r => `<div class="env-row"><span class="env-key">${r.k}</span><span class="env-val">${r.v}</span></div>`).join('');
-            } catch (e) {
-                document.getElementById('env-panel').innerHTML = `<div class="error-msg">${e.message}</div>`;
+        const rtHistory = [];
+        const MAX_RT = 60;
+        function rtPush(d) {
+            if (d.cpu_percent === undefined || !d.ram) return;
+            rtHistory.push({t:Date.now(), cpu:d.cpu_percent, ram:d.ram.percent});
+            if (rtHistory.length > MAX_RT) rtHistory.shift();
+            drawRealtime();
+        }
+        function drawRealtime() {
+            const c = document.getElementById('rt-canvas');
+            if (!c) return;
+            const ctx = c.getContext('2d');
+            const w = c.width, h = c.height;
+            const pad = {top:10, right:10, bottom:20, left:30};
+            const gw = w - pad.left - pad.right;
+            const gh = h - pad.top - pad.bottom;
+            ctx.clearRect(0, 0, w, h);
+            if (rtHistory.length < 2) { ctx.fillStyle = '#52525b'; ctx.font = '12px Inter,sans-serif'; ctx.fillText('Collecting data...', pad.left, h/2); return; }
+            // grid
+            ctx.strokeStyle = '#27272a'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 4; i++) { const y = pad.top + (gh/4)*i; ctx.moveTo(pad.left, y); ctx.lineTo(w-pad.right, y); }
+            ctx.stroke();
+            // draw line helper
+            const drawLine = (key, color) => {
+                ctx.strokeStyle = color; ctx.lineWidth = 2;
+                ctx.beginPath();
+                rtHistory.forEach((pt, i) => {
+                    const x = pad.left + (i/(MAX_RT-1))*gw;
+                    const y = pad.top + gh - (pt[key]/100)*gh;
+                    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                });
+                ctx.stroke();
+            };
+            drawLine('cpu', '#22d3ee');
+            drawLine('ram', '#a78bfa');
+            // labels
+            ctx.fillStyle = '#a1a1aa'; ctx.font = '10px Inter,sans-serif';
+            ctx.fillText('100%', 0, pad.top+8);
+            ctx.fillText('50%', 4, pad.top+gh/2+3);
+            ctx.fillText('0%', 6, h-4);
+            // legend
+            ctx.fillStyle = '#22d3ee'; ctx.fillRect(w-110, 6, 8, 8);
+            ctx.fillStyle = '#a1a1aa'; ctx.fillText('CPU', w-96, 14);
+            ctx.fillStyle = '#a78bfa'; ctx.fillRect(w-60, 6, 8, 8);
+            ctx.fillStyle = '#a1a1aa'; ctx.fillText('RAM', w-46, 14);
+        }
+
+        async function loadSystem() {
+            const d = await fetchJSON('/system');
+            rtPush(d);
+            const el = document.getElementById('system-panel');
+            if (d.error) { el.innerHTML = '<div class="empty" style="color:#f87171;">' + d.error + '</div>'; return; }
+            const bar = (l,p,v) => '<div style="margin-bottom:0.75rem;"><div class="prog-t"><span>' + l + '</span><span>' + v + '</span></div><div class="prog"><div class="prog-f" style="width:' + p + '%"></div></div></div>';
+            let h = '';
+            if (d.cpu_percent !== undefined) h += bar('CPU', d.cpu_percent, d.cpu_percent + '%');
+            if (d.ram) h += bar('RAM', d.ram.percent, d.ram.used_gb + ' / ' + d.ram.total_gb + ' GB');
+            if (d.disk) h += bar('Disk', d.disk.percent, d.disk.used_gb + ' / ' + d.disk.total_gb + ' GB');
+            el.innerHTML = h || '<div class="empty">No data</div>';
+        }
+
+        async function pollSystem() {
+            try { const d = await fetchJSON('/system'); rtPush(d); } catch (e) { console.error('pollSystem:', e); }
+        }
+        setInterval(pollSystem, 3000);
+
+        async function loadCelery() {
+            const d = await fetchJSON('/celery');
+            const el = document.getElementById('celery-panel');
+            if (d.error) { el.innerHTML = '<div class="empty" style="color:#f87171;">' + d.error + '</div>'; return; }
+            const w = d.workers_online || [], a = d.active_tasks || {};
+            const tc = Object.values(a).reduce((s,v) => s + (v?.length||0), 0);
+            let h = '<div style="font-size:0.875rem;color:var(--muted-fg);margin-bottom:0.4rem;">Broker: ' + d.broker + '</div>';
+            h += '<div style="font-size:0.875rem;margin-bottom:0.4rem;"><span style="color:var(--muted-fg);">Workers:</span> ' + (w.length ? w.join(', ') : '<span style="color:#f87171;">none</span>') + '</div>';
+            if (d.scheduled_count) h += '<div style="font-size:0.875rem;color:var(--muted-fg);">Scheduled: ' + d.scheduled_count + '</div>';
+            if (tc) h += '<div style="font-size:0.875rem;color:#eab308;margin-top:0.4rem;">Active tasks: ' + tc + '</div>';
+            el.innerHTML = h || '<div class="empty">No data</div>';
+        }
+
+        async function loadUsers() {
+            const d = await fetchJSON('/users');
+            const tbody = document.getElementById('users-tbody');
+            if (!d.users || !d.users.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty">No users</td></tr>';
+                return;
             }
+            tbody.innerHTML = d.users.map(u => `<tr>
+                <td>${u.email || '-'}</td>
+                <td>${u.display_name || '-'}</td>
+                <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                <td>${u.last_active ? new Date(u.last_active).toLocaleDateString() : '-'}</td>
+            </tr>`).join('');
+        }
+
+        async function loadStorage() {
+            const d = await fetchJSON('/storage');
+            const el = document.getElementById('storage-panel');
+            if (d.error) { el.innerHTML = '<div class="empty" style="color:#f87171;">' + d.error + '</div>'; return; }
+            el.innerHTML = '<div class="kv">' +
+                '<div class="kv-row"><span class="kv-k">Audio</span><span class="kv-v">' + (d.audio_count||0) + '</span></div>' +
+                '<div class="kv-row"><span class="kv-k">Images</span><span class="kv-v">' + (d.image_count||0) + '</span></div>' +
+                '<div class="kv-row"><span class="kv-k">Total</span><span class="kv-v">' + (d.total_media||0) + '</span></div>' +
+                '<div class="kv-row"><span class="kv-k">Bucket</span><span class="kv-v">' + d.bucket + '</span></div></div>';
         }
 
         async function refreshAll() {
             const spinner = document.getElementById('spinner');
             spinner.style.display = 'inline-block';
             try {
-                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadLogs(), loadEnv()]);
+                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadSystem(), loadCelery(), loadUsers(), loadStorage(), loadLogs()]);
             } catch (e) {
                 console.error('Refresh failed:', e);
             } finally {

@@ -67,6 +67,14 @@ class GeminiProvider(LLMProvider):
                 image_prompt="generic background scene"
             )
     
+    def is_available(self) -> bool:
+        """Check if Gemini API is available and configured."""
+        try:
+            self.client.models.list()
+            return True
+        except Exception:
+            return False
+    
     async def check_copyright(self, text: str) -> Dict[str, Any]:
         """
         Check if the text has copyright issues.

@@ -54,3 +54,8 @@ class LLMProvider(ABC):
             Dict with ethics analysis result
         """
         pass
+    
+    @abstractmethod
+    def is_available(self) -> bool:
+        """Check if the provider is available and configured."""
+        pass

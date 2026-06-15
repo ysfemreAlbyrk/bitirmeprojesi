@@ -35,6 +35,17 @@ class Bookmark(BaseModel):
     created_at: datetime
 
 
+class ReadingSessionCreate(BaseModel):
+    user_id: str
+    book_id: str
+
+
+class ReadingSessionUpdate(BaseModel):
+    ended_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    immersive_mode_seconds: Optional[int] = None
+
+
 class BookmarkCreate(BaseModel):
     user_id: str
     book_id: str

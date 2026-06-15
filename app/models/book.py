@@ -48,7 +48,7 @@ class BookCreate(BaseModel):
     author: str
     format: BookFormat
     file_size: int
-    file_url: str
+    file_url: Optional[str] = None
     total_pages: Optional[int] = None
 
 
@@ -60,9 +60,12 @@ class BookUpdate(BaseModel):
 
 class BookResponse(BaseModel):
     id: str
+    user_id: str
     title: str
     author: str
     format: BookFormat
+    file_size: int
+    file_url: str
     processing_status: ProcessingStatus
     audit_result: Optional[AuditResult] = None
     cover_url: Optional[str] = None

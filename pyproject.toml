@@ -33,6 +33,7 @@ dependencies = [
     "pytest-mock",
     "torchaudio",
     "stable-audio-3",
+    "psutil",
 ]
 
 [build-system]

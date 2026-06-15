@@ -77,7 +77,7 @@ CREATE TABLE reading_progress (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    current_chunk_id UUID NOT NULL REFERENCES text_chunks(id),
+    current_chunk_id UUID REFERENCES text_chunks(id) ON DELETE SET NULL,
     chapter_number INTEGER NOT NULL,
     "offset" INTEGER NOT NULL,
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -117,11 +117,15 @@ CREATE INDEX idx_bookmarks_user_book ON bookmarks(user_id, book_id);
 CREATE INDEX idx_media_assets_chunk_id ON media_assets(chunk_id);
 
 -- Row Level Security (RLS) policies
+-- Enable RLS on all tables
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE books ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chapters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE text_chunks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE reading_progress ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bookmarks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media_assets ENABLE ROW LEVEL SECURITY;
 
 -- Users: Users can only see their own data
 CREATE POLICY "Users can view own data" ON users
@@ -164,5 +168,56 @@ CREATE POLICY "Users can insert own bookmarks" ON bookmarks
 CREATE POLICY "Users can delete own bookmarks" ON bookmarks
     FOR DELETE USING (auth.uid() = user_id);
 
--- Chapters and text chunks are accessible to anyone who can access the book
--- (handled by the foreign key cascade and book-level RLS)
+-- Chapters: viewable if user can view parent book
+CREATE POLICY "Chapters viewable via book" ON chapters
+    FOR SELECT USING (
+        EXISTS (SELECT 1 FROM books WHERE books.id = chapters.book_id)
+    );
+
+CREATE POLICY "Chapters insert via book" ON chapters
+    FOR ALL USING (true) WITH CHECK (true);
+
+-- Text chunks: viewable if user can view parent book
+CREATE POLICY "Chunks viewable via book" ON text_chunks
+    FOR SELECT USING (
+        EXISTS (SELECT 1 FROM books WHERE books.id = text_chunks.book_id)
+    );
+
+CREATE POLICY "Chunks insert via book" ON text_chunks
+    FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "Chunks update via book" ON text_chunks
+    FOR UPDATE USING (true);
+
+-- Media assets: viewable if user can view parent chunk's book
+CREATE POLICY "Media assets viewable via chunk" ON media_assets
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM text_chunks
+            JOIN books ON books.id = text_chunks.book_id
+            WHERE text_chunks.id = media_assets.chunk_id
+        )
+    );
+
+-- Grant privileges for service_role and anon (local Supabase compatibility)
+-- Per-table grants (more reliable than ALL TABLES)
+GRANT ALL PRIVILEGES ON TABLE users TO service_role;
+GRANT ALL PRIVILEGES ON TABLE books TO service_role;
+GRANT ALL PRIVILEGES ON TABLE chapters TO service_role;
+GRANT ALL PRIVILEGES ON TABLE text_chunks TO service_role;
+GRANT ALL PRIVILEGES ON TABLE reading_sessions TO service_role;
+GRANT ALL PRIVILEGES ON TABLE reading_progress TO service_role;
+GRANT ALL PRIVILEGES ON TABLE bookmarks TO service_role;
+GRANT ALL PRIVILEGES ON TABLE media_assets TO service_role;
+
+-- Default privileges for future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon;
+
+-- Storage bucket (for lokal Supabase)
+INSERT INTO storage.buckets (id, name, public, avif_autodetection, file_size_limit, allowed_mime_types)
+VALUES ('media-assets', 'media-assets', true, false, 52428800, ARRAY['audio/wav', 'audio/mpeg', 'image/png', 'image/jpeg', 'image/webp', 'application/epub+zip', 'application/pdf'])
+ON CONFLICT (id) DO NOTHING;
+

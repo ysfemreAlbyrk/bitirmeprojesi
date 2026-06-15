@@ -2,7 +2,13 @@
 import asyncio
 from celery import shared_task
 from app.services.book_processing_service import BookProcessingService
-from app.core.dependencies import get_book_processing_service
+from app.core.dependencies import (
+    get_database,
+    get_llm_provider,
+    get_audio_provider,
+    get_image_provider
+)
+from app.core.storage import StorageService
 from app.utils.logger import get_logger
 
 logger = get_logger("vibetale")
@@ -21,8 +27,19 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
     logger.info(f"Starting async book processing for book_id: {book_id}")
     
     try:
-        # Get book processing service
-        processing_service = get_book_processing_service()
+        # Manually instantiate providers and services (no FastAPI Depends() in Celery context)
+        db = get_database()
+        llm = get_llm_provider()
+        audio = get_audio_provider()
+        image = get_image_provider()
+        storage = StorageService(db.client)
+        
+        processing_service = BookProcessingService(
+            llm_provider=llm,
+            audio_provider=audio,
+            image_provider=image,
+            storage_service=storage
+        )
         
         # Process the book (async method wrapped for sync Celery context)
         asyncio.run(processing_service.process_book(

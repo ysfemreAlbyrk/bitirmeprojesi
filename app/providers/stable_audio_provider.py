@@ -119,7 +119,7 @@ class StableAudioProvider(AudioGenerationProvider):
 
         return str(output_path)
 
-    async def is_available(self) -> bool:
+    def is_available(self) -> bool:
         """
         Check if the audio generation service is available.
 

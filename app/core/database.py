@@ -35,14 +35,10 @@ class Database:
                 pool=5.0
             )
             
-            # Create client with connection pooling
+            # Create client (simple initialization for compatibility)
             self._client = create_client(
                 settings.supabase_url,
-                settings.supabase_service_key,
-                options={
-                    'timeout': timeout,
-                    'limits': limits
-                }
+                settings.supabase_service_key
             )
             
             logger.info(f"Database connection pool configured: max_connections={settings.db_pool_maxsize}, keepalive={settings.db_pool_connections}")

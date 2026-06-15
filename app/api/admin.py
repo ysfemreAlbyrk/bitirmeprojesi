@@ -36,7 +36,7 @@ async def admin_dashboard(
 ):
     """Render admin dashboard HTML."""
     _verify_admin_key(key, x_admin_key)
-    return templates.TemplateResponse("dashboard.html", {"request": request, "key": key or x_admin_key or ""})
+    return templates.TemplateResponse(request, "dashboard.html", {"key": key or x_admin_key or ""})
 
 
 @router.get("/api/stats")

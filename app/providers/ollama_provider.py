@@ -177,7 +177,7 @@ class OllamaProvider(LLMProvider):
         except Exception as e:
             return {"status": "audit_failed", "reason": str(e), "confidence": 0.0}
     
-    async def is_available(self) -> bool:
+    def is_available(self) -> bool:
         """
         Check if Ollama service is available.
         
@@ -186,8 +186,9 @@ class OllamaProvider(LLMProvider):
         """
         try:
             url = f"{self.base_url}/api/tags"
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
+            import httpx
+            with httpx.Client(timeout=5.0) as client:
+                response = client.get(url)
                 return response.status_code == 200
         except Exception:
             return False

@@ -24,7 +24,7 @@ nvidia-smi
 ## Step 1: Clone the Repository
 
 ```bash
-git clone <your-repository-url>
+git clone ysfemreAlbyrk/bitirmeprojesi
 cd bitirmeprojesi
 ```
 

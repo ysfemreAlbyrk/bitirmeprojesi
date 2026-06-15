@@ -11,15 +11,16 @@ from app.utils.pagination import PaginatedResponse, PaginationParams, paginate
 router = APIRouter(prefix="/reading", tags=["reading"])
 
 
-@router.get("/progress/{book_id}")
 @router.post("/sessions")
 async def create_reading_session(
     session: ReadingSessionCreate,
+    user_id: str = Depends(get_current_user_id),
     db: Database = Depends(get_database)
 ):
     """Start a new reading session."""
     session_data = session.model_dump()
     session_data['id'] = str(uuid.uuid4())
+    session_data['user_id'] = user_id
     response = db.client.table('reading_sessions').insert(session_data).execute()
     if response.data:
         return response.data[0]
@@ -42,9 +43,9 @@ async def update_reading_session(
     raise HTTPException(status_code=404, detail="Reading session not found")
 
 
-@router.get("/sessions/{user_id}")
+@router.get("/sessions")
 async def list_reading_sessions(
-    user_id: str,
+    user_id: str = Depends(get_current_user_id),
     db: Database = Depends(get_database)
 ):
     """List all reading sessions for a user."""
@@ -52,7 +53,7 @@ async def list_reading_sessions(
     return {"sessions": response.data or []}
 
 
-@router.get("/progress/{user_id}/{book_id}")
+@router.get("/progress/{book_id}")
 async def get_reading_progress(
     book_id: str,
     user_id: str = Depends(get_current_user_id),

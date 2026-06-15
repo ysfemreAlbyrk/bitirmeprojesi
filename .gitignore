@@ -106,3 +106,5 @@ generate_keys.py
 # volumes/db/
 # volumes/storage/
 # volumes/api/ is intentionally tracked (contains kong.yml)
+
+*.zip

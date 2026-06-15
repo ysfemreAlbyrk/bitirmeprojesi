@@ -132,6 +132,13 @@
         </div>
 
         <div class="card">
+            <div class="card-h"><div class="card-t">Realtime</div><div class="card-d">CPU & RAM — last 60s</div></div>
+            <div class="card-c">
+                <canvas id="rt-canvas" width="1000" height="180" style="width:100%;height:180px;border-radius:6px;"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
             <div class="card-h"><div class="card-t">Celery</div><div class="card-d">Workers & tasks</div></div>
             <div class="card-c" id="celery-panel"></div>
         </div>
@@ -249,8 +256,13 @@
             const g = document.getElementById('health-grid');
             const sv = [{k:'llm_provider',l:'LLM'},{k:'audio_provider',l:'Audio'},{k:'image_provider',l:'Image'},{k:'supabase',l:'DB'},{k:'redis',l:'Redis'},{k:'celery_broker',l:'Celery'}];
             g.innerHTML = sv.map(s => {
-                const ok = d[s.k]?.available, n = d[s.k]?.name || '';
-                return `<div class="h-card"><div class="h-lbl">${s.l}</div><div class="h-val ${ok?'ok':'down'}">${n || (ok?'up':'down')}</div></div>`;
+                const ok = d[s.k]?.available;
+                let val = d[s.k]?.name || (ok ? 'up' : 'down');
+                if (s.k === 'celery_broker') {
+                    const wc = d[s.k]?.workers_online || 0;
+                    val = ok ? (wc > 0 ? wc + ' workers' : 'up (0 workers)') : 'down';
+                }
+                return `<div class="h-card"><div class="h-lbl">${s.l}</div><div class="h-val ${ok?'ok':'down'}">${val}</div></div>`;
             }).join('');
         }
 
@@ -258,11 +270,11 @@
             const d = await fetchJSON('/gpu');
             const el = document.getElementById('gpu-panel');
             if (!d.available) { el.innerHTML = '<div class="empty">' + (d.message || d.error || 'GPU unavailable') + '</div>'; return; }
-            const pct = Math.round((d.reserved_gb / d.total_gb) * 100);
+            const pct = Math.round((d.allocated_gb / d.total_gb) * 100);
             el.innerHTML = '<div style="font-weight:500;margin-bottom:0.4rem;font-size:0.875rem;">' + d.device + '</div>' +
                 '<div class="prog"><div class="prog-f" style="width:' + pct + '%"></div></div>' +
-                '<div class="prog-t"><span>' + d.reserved_gb + ' / ' + d.total_gb + ' GB</span><span>' + pct + '%</span></div>' +
-                '<div class="prog-t"><span>Allocated ' + d.allocated_gb + ' GB</span><span>Free ' + d.free_gb + ' GB</span></div>';
+                '<div class="prog-t"><span>Allocated ' + d.allocated_gb + ' / ' + d.total_gb + ' GB</span><span>' + pct + '%</span></div>' +
+                '<div class="prog-t"><span>Reserved ' + d.reserved_gb + ' GB</span><span>Free ' + d.free_gb + ' GB</span></div>';
         }
 
         async function loadLogs() {
@@ -274,13 +286,62 @@
                 let c = 'l-info';
                 if (/ERROR|CRITICAL/.test(ln)) c = 'l-err';
                 else if (/WARNING/.test(ln)) c = 'l-warn';
-                return '<div class="log-line ' + c + '">' + ln.replace(/</g, '&lt;') + '</div>';
+                return '<div class="l-line ' + c + '">' + ln.replace(/</g, '&lt;') + '</div>';
             }).join('');
             el.scrollTop = el.scrollHeight;
         }
 
+        const rtHistory = [];
+        const MAX_RT = 60;
+        function rtPush(d) {
+            if (d.cpu_percent === undefined || !d.ram) return;
+            rtHistory.push({t:Date.now(), cpu:d.cpu_percent, ram:d.ram.percent});
+            if (rtHistory.length > MAX_RT) rtHistory.shift();
+            drawRealtime();
+        }
+        function drawRealtime() {
+            const c = document.getElementById('rt-canvas');
+            if (!c) return;
+            const ctx = c.getContext('2d');
+            const w = c.width, h = c.height;
+            const pad = {top:10, right:10, bottom:20, left:30};
+            const gw = w - pad.left - pad.right;
+            const gh = h - pad.top - pad.bottom;
+            ctx.clearRect(0, 0, w, h);
+            if (rtHistory.length < 2) { ctx.fillStyle = '#52525b'; ctx.font = '12px Inter,sans-serif'; ctx.fillText('Collecting data...', pad.left, h/2); return; }
+            // grid
+            ctx.strokeStyle = '#27272a'; ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 4; i++) { const y = pad.top + (gh/4)*i; ctx.moveTo(pad.left, y); ctx.lineTo(w-pad.right, y); }
+            ctx.stroke();
+            // draw line helper
+            const drawLine = (key, color) => {
+                ctx.strokeStyle = color; ctx.lineWidth = 2;
+                ctx.beginPath();
+                rtHistory.forEach((pt, i) => {
+                    const x = pad.left + (i/(MAX_RT-1))*gw;
+                    const y = pad.top + gh - (pt[key]/100)*gh;
+                    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                });
+                ctx.stroke();
+            };
+            drawLine('cpu', '#22d3ee');
+            drawLine('ram', '#a78bfa');
+            // labels
+            ctx.fillStyle = '#a1a1aa'; ctx.font = '10px Inter,sans-serif';
+            ctx.fillText('100%', 0, pad.top+8);
+            ctx.fillText('50%', 4, pad.top+gh/2+3);
+            ctx.fillText('0%', 6, h-4);
+            // legend
+            ctx.fillStyle = '#22d3ee'; ctx.fillRect(w-110, 6, 8, 8);
+            ctx.fillStyle = '#a1a1aa'; ctx.fillText('CPU', w-96, 14);
+            ctx.fillStyle = '#a78bfa'; ctx.fillRect(w-60, 6, 8, 8);
+            ctx.fillStyle = '#a1a1aa'; ctx.fillText('RAM', w-46, 14);
+        }
+
         async function loadSystem() {
             const d = await fetchJSON('/system');
+            rtPush(d);
             const el = document.getElementById('system-panel');
             if (d.error) { el.innerHTML = '<div class="empty" style="color:#f87171;">' + d.error + '</div>'; return; }
             const bar = (l,p,v) => '<div style="margin-bottom:0.75rem;"><div class="prog-t"><span>' + l + '</span><span>' + v + '</span></div><div class="prog"><div class="prog-f" style="width:' + p + '%"></div></div></div>';
@@ -290,6 +351,11 @@
             if (d.disk) h += bar('Disk', d.disk.percent, d.disk.used_gb + ' / ' + d.disk.total_gb + ' GB');
             el.innerHTML = h || '<div class="empty">No data</div>';
         }
+
+        async function pollSystem() {
+            try { const d = await fetchJSON('/system'); rtPush(d); } catch (e) { console.error('pollSystem:', e); }
+        }
+        setInterval(pollSystem, 3000);
 
         async function loadCelery() {
             const d = await fetchJSON('/celery');
@@ -314,8 +380,8 @@
             tbody.innerHTML = d.users.map(u => `<tr>
                 <td>${u.email || '-'}</td>
                 <td>${u.display_name || '-'}</td>
-                <td>${u.created_at ? new Date(u.created_at).toLocaleString() : '-'}</td>
-                <td>${u.last_active ? new Date(u.last_active).toLocaleString() : '-'}</td>
+                <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                <td>${u.last_active ? new Date(u.last_active).toLocaleDateString() : '-'}</td>
             </tr>`).join('');
         }
 

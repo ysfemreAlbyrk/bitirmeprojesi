@@ -152,7 +152,7 @@ async def admin_health(
         },
         "supabase": {"available": db_ok},
         "redis": {"available": redis_ok},
-        "celery_broker": {"available": redis_ok}
+        "celery_broker": {"available": redis_ok, "workers_online": _celery_worker_count()}
     }
 
 
@@ -352,6 +352,20 @@ def _has_psutil() -> bool:
         return False
 
 
+def _celery_worker_count() -> int:
+    """Return number of online Celery workers, or 0 if unreachable."""
+    try:
+        from celery import Celery
+        from config import settings
+        app = Celery("vibetale", broker=settings.celery_broker_url)
+        inspect = app.control.inspect()
+        ping = inspect.ping()
+        app.close()
+        return len(ping) if ping else 0
+    except Exception:
+        return 0
+
+
 @router.get("/api/celery")
 async def admin_celery(
     key: Optional[str] = Query(None),
@@ -410,8 +424,8 @@ async def admin_storage(
 
     try:
         # Count media assets by type
-        audio_resp = db.client.table("media_assets").select("count").eq("media_type", "audio").execute()
-        image_resp = db.client.table("media_assets").select("count").eq("media_type", "image").execute()
+        audio_resp = db.client.table("media_assets").select("count").eq("asset_type", "audio").execute()
+        image_resp = db.client.table("media_assets").select("count").eq("asset_type", "image").execute()
 
         result["audio_count"] = len(audio_resp.data) if audio_resp.data else 0
         result["image_count"] = len(image_resp.data) if image_resp.data else 0

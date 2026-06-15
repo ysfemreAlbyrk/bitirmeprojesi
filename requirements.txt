@@ -1,4 +1,5 @@
 fastapi[standard]
+PyJWT
 pydantic
 pydantic-settings
 python-multipart

@@ -8,6 +8,8 @@ from typing import Optional
 class BookFormat(str, Enum):
     EPUB = "epub"
     PDF = "pdf"
+    TXT = "txt"
+    DOCX = "docx"
 
 
 class ProcessingStatus(str, Enum):
@@ -71,6 +73,12 @@ class BookResponse(BaseModel):
     cover_url: Optional[str] = None
     upload_date: datetime
     last_read_date: Optional[datetime] = None
-    
+    total_pages: Optional[int] = None
+    genre: Optional[str] = None
+    description: Optional[str] = None
+    rating: Optional[float] = None
+    is_public: Optional[bool] = None
+    read_count: Optional[int] = None
+
     class Config:
         use_enum_values = True

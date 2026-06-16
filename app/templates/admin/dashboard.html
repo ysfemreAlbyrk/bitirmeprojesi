@@ -278,7 +278,7 @@
         }
 
         async function loadLogs() {
-            const d = await fetchJSON('/logs?lines=30');
+            const d = await fetchJSON('/logs?lines=200');
             const el = document.getElementById('log-panel');
             const lines = d.errors?.length ? d.errors : (d.main || []);
             if (!lines.length) { el.innerHTML = '<div class="empty">No logs</div>'; return; }
@@ -355,7 +355,7 @@
         async function pollSystem() {
             try { const d = await fetchJSON('/system'); rtPush(d); } catch (e) { console.error('pollSystem:', e); }
         }
-        setInterval(pollSystem, 3000);
+        setInterval(pollSystem, 10000);
 
         async function loadCelery() {
             const d = await fetchJSON('/celery');
@@ -408,11 +408,11 @@
             }
         }
 
-        let countdown = 30;
+        let countdown = 60;
         setInterval(() => {
             countdown--;
             if (countdown <= 0) {
-                countdown = 30;
+                countdown = 60;
                 refreshAll();
             }
             document.getElementById('timer').textContent = countdown;

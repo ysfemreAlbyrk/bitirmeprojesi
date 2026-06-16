@@ -1,4 +1,5 @@
 """Supabase Storage operations for media assets"""
+import mimetypes
 from supabase import Client
 from config import settings
 from pathlib import Path
@@ -31,10 +32,15 @@ class StorageService:
         if object_name is None:
             object_name = f"{uuid.uuid4()}_{Path(file_path).name}"
         
+        mime_type, _ = mimetypes.guess_type(file_path)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
         with open(file_path, 'rb') as f:
             self.client.storage.from_(self.bucket_name).upload(
                 object_name,
-                f.read()
+                f.read(),
+                file_options={"content-type": mime_type}
             )
         
         # Get public URL

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # Stable Audio 3 Configuration
     stable_audio_model: str = "small-sfx"
+    stable_audio_model_path: str = "models/stable-audio-3-small-sfx/model.safetensors"
     
     # Image Generation Configuration
     image_generation_model: str = "clipdrop"  # Options: clipdrop, local

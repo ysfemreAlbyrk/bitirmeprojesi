@@ -108,3 +108,5 @@ generate_keys.py
 # volumes/api/ is intentionally tracked (contains kong.yml)
 
 *.zip
+models/
+signing_keys.json

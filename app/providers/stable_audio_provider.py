@@ -22,11 +22,15 @@ def _get_model():
         try:
             import torch
             from stable_audio_3 import StableAudioModel
+            from config import settings
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
             logger.info(f"Loading Stable Audio 3 Small SFX on {device} ...")
 
-            model = StableAudioModel.from_pretrained("small-sfx")
+            # Lokal model klasörü (config.py'deki dosya yolundan klasörü bul)
+            model_dir = os.path.dirname(os.path.abspath(settings.stable_audio_model_path))
+            logger.info(f"Loading model from local directory: {model_dir}")
+            model = StableAudioModel.from_pretrained(model_dir)
             model = model.to(device)
 
             if device == "cuda":

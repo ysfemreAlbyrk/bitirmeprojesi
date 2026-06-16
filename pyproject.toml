@@ -34,6 +34,8 @@ dependencies = [
     "torchaudio",
     "stable-audio-3",
     "psutil",
+    "safetensors>=0.8.0",
+    "cryptography",
 ]
 
 [build-system]

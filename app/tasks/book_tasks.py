@@ -55,6 +55,13 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
         logger.error(f"Book processing failed for book_id {book_id}: {str(e)}", exc_info=True)
         self.retry(exc=e, countdown=60, max_retries=3)
         return {"status": "failed", "book_id": book_id, "error": str(e)}
+    finally:
+        # Clean up temp file after processing
+        from pathlib import Path
+        tmp = Path(file_path)
+        if tmp.exists():
+            tmp.unlink()
+            logger.debug(f"Cleaned up temp file: {file_path}")
 
 
 @shared_task(name="cleanup_temp_files")

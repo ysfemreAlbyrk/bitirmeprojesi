@@ -36,7 +36,7 @@ class Bookmark(BaseModel):
 
 
 class ReadingSessionCreate(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
     book_id: str
 
 
@@ -47,7 +47,7 @@ class ReadingSessionUpdate(BaseModel):
 
 
 class BookmarkCreate(BaseModel):
-    user_id: str
+    user_id: Optional[str] = None
     book_id: str
     chunk_id: str
     chapter_number: int

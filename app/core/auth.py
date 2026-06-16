@@ -19,16 +19,17 @@ def get_current_user_id(
         payload = jwt.decode(
             token,
             settings.supabase_jwt_secret,
-            algorithms=["HS256"],
+            algorithms=["HS256", "ES256"],
             options={"verify_aud": False},
         )
-        user_id: str | None = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token geçersiz: user_id bulunamadı")
-        return user_id
     except jwt.ExpiredSignatureError:
         logger.warning("Süresi dolmuş JWT ile istek atıldı")
         raise HTTPException(status_code=401, detail="Oturum süresi dolmuş, lütfen tekrar giriş yapın")
-    except jwt.InvalidTokenError as exc:
-        logger.warning(f"Geçersiz JWT: {exc}")
+    except jwt.InvalidTokenError:
+        logger.warning("JWT hem HS256 hem ES256 ile doğrulanamadı")
         raise HTTPException(status_code=401, detail="Geçersiz kimlik bilgisi")
+
+    user_id: str | None = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token geçersiz: user_id bulunamadı")
+    return user_id

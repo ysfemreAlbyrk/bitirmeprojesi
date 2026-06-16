@@ -14,18 +14,28 @@ ALLOWED_MIME_TYPES = {
     'application/epub',
     'application/pdf',
     'application/x-pdf',
+    'text/plain',
+    'text/x-log',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
 # File extensions to MIME type mapping
 EXTENSION_MIME_MAP = {
     '.epub': 'application/epub+zip',
     '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.log': 'text/x-log',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 }
 
 # Magic bytes for file type verification
 MAGIC_BYTES = {
     b'\x50\x4b\x03\x04': 'application/epub+zip',  # EPUB (ZIP)
     b'\x25\x50\x44\x46': 'application/pdf',       # PDF
+    b'\xef\xbb\xbf': 'text/plain',              # UTF-8 BOM (TXT)
+    b'\x50\x4b\x03\x04': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # DOCX (ZIP)
 }
 
 

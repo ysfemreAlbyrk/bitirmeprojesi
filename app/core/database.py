@@ -126,8 +126,15 @@ class TextChunkRepository:
         return response.data
     
     def get_by_book(self, book_id: str) -> List[Dict[str, Any]]:
-        """Get all text chunks for a book"""
-        response = self.db.client.table('text_chunks').select('*').eq('book_id', book_id).order('order').execute()
+        """Get all text chunks for a book with chapter_number joined"""
+        response = self.db.client.table('text_chunks').select(
+            '*, chapters(chapter_number)'
+        ).eq('book_id', book_id).order('order').execute()
+        # Flatten nested chapters dict into chapter_number field
+        for chunk in (response.data or []):
+            if chunk.get('chapters'):
+                chunk['chapter_number'] = chunk['chapters'][0].get('chapter_number')
+                del chunk['chapters']
         return response.data
     
     def update(self, chunk_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:

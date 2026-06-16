@@ -184,7 +184,7 @@ async def get_book_chunks(
         {
             "chunk_id": chunk["id"],
             "sequence": chunk.get("order", idx),
-            "content": chunk.get("content", ""),
+            "content": chunk.get("text", ""),
             "chapter_id": chunk.get("chapter_id"),
             "chapter_number": chunk.get("chapter_number"),
             "has_audio": bool(chunk.get("audio_url")),

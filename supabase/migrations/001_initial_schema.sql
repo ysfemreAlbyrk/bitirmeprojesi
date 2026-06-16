@@ -20,7 +20,7 @@ CREATE TABLE books (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(500) NOT NULL,
     author VARCHAR(255) NOT NULL,
-    format VARCHAR(10) NOT NULL CHECK (format IN ('epub', 'pdf')),
+    format VARCHAR(10) NOT NULL CHECK (format IN ('epub', 'pdf', 'txt', 'docx')),
     file_size INTEGER NOT NULL,
     file_url TEXT NOT NULL,
     upload_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

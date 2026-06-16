@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     app_port: int = 8000
     debug: bool = True
     max_file_size: int = 50000000  # 50MB
+    audit_enabled: bool = True  # Toggle content audit on/off
     
     # Storage
     storage_bucket_name: str = "media-assets"

@@ -79,6 +79,16 @@
         .empty { text-align:center; color:#52525b; padding:2rem; font-size:0.875rem; }
         .spin { display:inline-block; width:12px; height:12px; border:2px solid var(--border); border-top-color:var(--fg); border-radius:50%; animation:spin 1s linear infinite; vertical-align:middle; margin-left:0.5rem; }
         @keyframes spin { to { transform:rotate(360deg); } }
+
+        .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+        .toggle-lbl { font-size:0.875rem; }
+        .toggle { position:relative; width:44px; height:24px; }
+        .toggle input { opacity:0; width:0; height:0; }
+        .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--muted); border-radius:999px; transition:.2s; }
+        .slider:before { position:absolute; content:""; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:.2s; }
+        .toggle input:checked + .slider { background:#4ade80; }
+        .toggle input:checked + .slider:before { transform:translateX(20px); }
+        .toggle-row .status { font-size:0.75rem; color:var(--muted-fg); }
     </style>
 </head>
 <body>
@@ -115,8 +125,19 @@
                 <div class="card-c"><div class="h-grid" id="health-grid"></div></div>
             </div>
             <div class="card">
-                <div class="card-h"><div class="card-t">Storage</div><div class="card-d">media-assets bucket</div></div>
-                <div class="card-c" id="storage-panel"></div>
+                <div class="card-h"><div class="card-t">Settings</div><div class="card-d">Processing toggles</div></div>
+                <div class="card-c">
+                    <div class="toggle-row">
+                        <span class="toggle-lbl">Content Audit</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="audit-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-row" style="margin-top:0.5rem;">
+                        <span class="status" id="audit-status">Loading…</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -396,11 +417,40 @@
                 '<div class="kv-row"><span class="kv-k">Bucket</span><span class="kv-v">' + d.bucket + '</span></div></div>';
         }
 
+        async function loadAuditSetting() {
+            const d = await fetchJSON('/settings/audit');
+            const toggle = document.getElementById('audit-toggle');
+            const status = document.getElementById('audit-status');
+            if (d.audit_enabled !== undefined) {
+                toggle.checked = d.audit_enabled;
+                status.textContent = d.audit_enabled ? 'Audit enabled — all books checked' : 'Audit disabled — books auto-approved';
+                status.style.color = d.audit_enabled ? '#4ade80' : '#f87171';
+            }
+        }
+
+        async function toggleAudit(el) {
+            const enabled = el.checked;
+            const status = document.getElementById('audit-status');
+            status.textContent = 'Saving…';
+            try {
+                const resp = await fetch(`${BASE}/settings/audit?enabled=${enabled}&key=${encodeURIComponent(KEY)}`);
+                const d = await resp.json();
+                status.textContent = d.audit_enabled ? 'Audit enabled — all books checked' : 'Audit disabled — books auto-approved';
+                status.style.color = d.audit_enabled ? '#4ade80' : '#f87171';
+            } catch (e) {
+                status.textContent = 'Error saving setting';
+                status.style.color = '#f87171';
+                console.error('toggleAudit:', e);
+            }
+        }
+
+        document.getElementById('audit-toggle').addEventListener('change', function() { toggleAudit(this); });
+
         async function refreshAll() {
             const spinner = document.getElementById('spinner');
             spinner.style.display = 'inline-block';
             try {
-                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadSystem(), loadCelery(), loadUsers(), loadStorage(), loadLogs()]);
+                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadSystem(), loadCelery(), loadUsers(), loadStorage(), loadLogs(), loadAuditSetting()]);
             } catch (e) {
                 console.error('Refresh failed:', e);
             } finally {

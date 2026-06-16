@@ -74,17 +74,21 @@ class BookProcessingService:
             chapters_data = extracted_data['chapters']
             logger.info(f"Extracted {len(chapters_data)} chapters, {len(full_text)} characters")
             
-            # Step 2: Audit check
-            logger.debug("Performing content audit")
-            audit_result = await self.audit_service.audit_book(full_text)
-            logger.info(f"Audit result: {audit_result}")
-            
-            if audit_result != AuditResult.APPROVED:
-                self.book_repo.update(book_id, {
-                    'processing_status': ProcessingStatus.FAILED,
-                    'audit_result': audit_result
-                })
-                return
+            # Step 2: Audit check (can be disabled via settings)
+            if settings.audit_enabled:
+                logger.debug("Performing content audit")
+                audit_result = await self.audit_service.audit_book(full_text)
+                logger.info(f"Audit result: {audit_result}")
+                
+                if audit_result != AuditResult.APPROVED:
+                    self.book_repo.update(book_id, {
+                        'processing_status': ProcessingStatus.FAILED,
+                        'audit_result': audit_result
+                    })
+                    return
+            else:
+                logger.info("Content audit disabled - auto-approving")
+                audit_result = AuditResult.APPROVED
             
             self.book_repo.update(book_id, {'audit_result': AuditResult.APPROVED})
             

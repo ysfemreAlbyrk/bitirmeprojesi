@@ -14,14 +14,15 @@ from app.core.auth import get_current_user_id
 logger = get_logger("vibetale")
 
 from app.models.book import Book, BookCreate, BookResponse, ProcessingStatus
-from app.core.database import BookRepository, TextChunkRepository
+from app.core.database import BookRepository, TextChunkRepository, ChapterRepository
 from app.services.book_processing_service import BookProcessingService
 from app.core.storage import StorageService
 from app.core.dependencies import (
     get_book_processing_service,
     get_book_repository,
     get_storage_service,
-    get_text_chunk_repository
+    get_text_chunk_repository,
+    get_chapter_repository
 )
 from config import settings
 
@@ -90,15 +91,18 @@ async def upload_book(
         return BookResponse(**book_record)
 
     except HTTPException:
+        # Clean up temp file on upload error only
+        if temp_file_path.exists():
+            temp_file_path.unlink()
+            logger.debug(f"Temporary file removed after upload error: {temp_file_path}")
         raise
     except Exception as e:
         logger.error(f"Book upload failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-    finally:
+        # Clean up temp file on upload error only
         if temp_file_path.exists():
             temp_file_path.unlink()
-            logger.debug(f"Temporary file removed: {temp_file_path}")
+            logger.debug(f"Temporary file removed after upload error: {temp_file_path}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/", response_model=PaginatedResponse[BookResponse])
@@ -144,9 +148,11 @@ async def get_book(
 async def get_book_status(
     book_id: str,
     book_repo: BookRepository = Depends(get_book_repository),
+    chunk_repo: TextChunkRepository = Depends(get_text_chunk_repository),
+    chapter_repo: ChapterRepository = Depends(get_chapter_repository),
     user_id: str = Depends(get_current_user_id),
 ):
-    """Get processing status of a book."""
+    """Get detailed processing status of a book with step-by-step progress."""
     book = book_repo.get_by_id(book_id)
 
     if not book:
@@ -155,10 +161,56 @@ async def get_book_status(
     if book.get('user_id') != user_id:
         raise HTTPException(status_code=403, detail="Bu kitaba erişim izniniz yok")
 
+    status = book['processing_status']
+    audit = book.get('audit_result')
+
+    # Gather chunk stats for step inference
+    chunks = chunk_repo.get_by_book(book_id) or []
+    total_chunks = len(chunks)
+    analyzed = sum(1 for c in chunks if c.get('analyzed'))
+    audio_count = sum(1 for c in chunks if c.get('audio_url'))
+    image_count = sum(1 for c in chunks if c.get('image_url'))
+
+    chapters = chapter_repo.get_by_book(book_id) or []
+
+    # Build processing steps with completion inference
+    audit_passed = audit is not None and audit != 'AUDIT_FAILED'
+    steps = [
+        {"name": "text_extraction", "label": "Metin Çıkarma", "completed": total_chunks > 0},
+        {"name": "content_audit", "label": "İçerik Denetimi", "completed": audit_passed},
+        {"name": "chapter_splitting", "label": "Bölüm Ayrıştırma", "completed": len(chapters) > 0},
+        {"name": "semantic_chunking", "label": "Anlamsal Parçalama", "completed": total_chunks > 0},
+        {"name": "scene_analysis", "label": "Sahne Analizi", "completed": total_chunks > 0 and analyzed >= total_chunks},
+        {"name": "audio_generation", "label": "Ses Üretimi", "completed": total_chunks > 0 and audio_count >= total_chunks},
+        {"name": "image_generation", "label": "Görsel Üretimi", "completed": total_chunks > 0 and image_count >= total_chunks},
+    ]
+
+    # Mark current step
+    if status in ("processing", "pending"):
+        for step in steps:
+            if not step["completed"]:
+                step["current"] = True
+                break
+    elif status == "failed":
+        # Mark the first incomplete step as current to show where it failed
+        for step in steps:
+            if not step["completed"]:
+                step["current"] = True
+                break
+
+    completed_steps = sum(1 for s in steps if s["completed"])
+    progress = int((completed_steps / len(steps)) * 100) if steps else 0
+
     return {
         "book_id": book_id,
-        "processing_status": book['processing_status'],
-        "audit_result": book.get('audit_result')
+        "processing_status": status,
+        "audit_result": audit,
+        "progress_percent": progress,
+        "total_chunks": total_chunks,
+        "analyzed_chunks": analyzed,
+        "audio_chunks": audio_count,
+        "image_chunks": image_count,
+        "steps": steps
     }
 
 

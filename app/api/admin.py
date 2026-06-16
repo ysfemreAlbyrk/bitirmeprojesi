@@ -435,3 +435,26 @@ async def admin_storage(
         result["error"] = str(e)
 
     return result
+
+
+@router.get("/api/settings/audit")
+async def get_audit_setting(
+    key: Optional[str] = Query(None),
+    x_admin_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Get current audit enabled setting."""
+    _verify_admin_key(key, x_admin_key)
+    return {"audit_enabled": settings.audit_enabled}
+
+
+@router.post("/api/settings/audit")
+async def toggle_audit_setting(
+    enabled: bool,
+    key: Optional[str] = Query(None),
+    x_admin_key: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Toggle content audit on/off."""
+    _verify_admin_key(key, x_admin_key)
+    settings.audit_enabled = enabled
+    logger.info(f"Content audit setting changed to: {enabled}")
+    return {"audit_enabled": settings.audit_enabled, "message": f"Audit {'enabled' if enabled else 'disabled'}"}

@@ -1,7 +1,8 @@
 """Celery tasks for book processing"""
 import asyncio
+import concurrent.futures
 from pathlib import Path
-from celery import shared_task
+from app.tasks.celery_app import celery_app
 from app.services.book_processing_service import BookProcessingService
 from app.core.dependencies import (
     get_database,
@@ -15,7 +16,19 @@ from app.utils.logger import get_logger
 logger = get_logger("vibetale")
 
 
-@shared_task(bind=True, name="process_book_async")
+def _run_async(coro):
+    """Run a coroutine, whether or not an event loop is already running."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    # Already inside an event loop (EAGER mode) – run in a fresh thread
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
+@celery_app.task(bind=True, name="process_book_async")
 def process_book_async(self, book_id: str, file_path: str, file_format: str):
     """
     Async task for processing a book.
@@ -43,7 +56,7 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
         )
         
         # Process the book (async method wrapped for sync Celery context)
-        asyncio.run(processing_service.process_book(
+        _run_async(processing_service.process_book(
             book_id=book_id,
             file_path=file_path,
             file_format=file_format
@@ -69,7 +82,7 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
         # self.retry() raises a Retry exception; code below never runs
 
 
-@shared_task(name="cleanup_temp_files")
+@celery_app.task(name="cleanup_temp_files")
 def cleanup_temp_files():
     """
     Background task to clean up temporary files.

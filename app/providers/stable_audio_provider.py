@@ -81,6 +81,9 @@ class StableAudioProvider(AudioGenerationProvider):
         if negative_prompt is None:
             negative_prompt = "music, speech, noise, distortion"
 
+        print(f"\n{'='*60}\n[AUDIO PROMPT - Stable Audio 3]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        print(f"[AUDIO PARAMS] duration={duration}s | negative_prompt={negative_prompt}")
+
         logger.info(f"Generating {duration}s audio with Stable Audio 3: {prompt[:60]}...")
 
         with torch.no_grad():
@@ -120,6 +123,8 @@ class StableAudioProvider(AudioGenerationProvider):
 
         torchaudio.save(str(output_path), audio.cpu(), sr)
         logger.info(f"Audio saved to {output_path}")
+        
+        print(f"\n[AUDIO RESPONSE - Stable Audio 3] Saved to: {output_path} | duration={duration}s | sr={sr}Hz\n{'='*60}\n")
 
         return str(output_path)
 

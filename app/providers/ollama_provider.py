@@ -34,15 +34,20 @@ class OllamaProvider(LLMProvider):
             }
         }
         
+        print(f"\n{'='*60}\n[LLM PROMPT - Ollama]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 result = response.json()
-                return result.get("response", "")
+                response_text = result.get("response", "")
+                print(f"\n[LLM RESPONSE - Ollama]\n{'-'*60}\n{response_text[:500]}...\n{'='*60}\n")
+                return response_text
         except httpx.TimeoutException:
             raise RuntimeError("Ollama request timed out")
         except Exception as e:
+            print(f"\n[LLM ERROR - Ollama] {str(e)}\n{'='*60}\n")
             raise RuntimeError(f"Ollama API error: {str(e)}")
     
     async def analyze_scene(self, text: str) -> SceneAnalysis:

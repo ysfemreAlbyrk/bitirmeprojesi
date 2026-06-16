@@ -50,6 +50,8 @@ class ClipdropProvider(ImageGenerationProvider):
             "prompt": (None, prompt, "text/plain")
         }
         
+        print(f"\n{'='*60}\n[IMAGE PROMPT - Clipdrop]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -68,11 +70,12 @@ class ClipdropProvider(ImageGenerationProvider):
                     remaining_credits = response.headers.get("x-remaining-credits", "unknown")
                     credits_consumed = response.headers.get("x-credits-consumed", "unknown")
                     
-                    print(f"Clipdrop API: Generated image. Credits consumed: {credits_consumed}, Remaining: {remaining_credits}")
+                    print(f"\n[IMAGE RESPONSE - Clipdrop] Status: 200 OK | Saved to: {output_path} | Credits: {credits_consumed}/{remaining_credits}\n{'='*60}\n")
                     
                     return str(output_path)
                 else:
                     error_detail = response.json() if response.headers.get("content-type") == "application/json" else response.text
+                    print(f"\n[IMAGE ERROR - Clipdrop] Status: {response.status_code} - {error_detail}\n{'='*60}\n")
                     raise RuntimeError(f"Clipdrop API error: {response.status_code} - {error_detail}")
                     
         except httpx.TimeoutException:

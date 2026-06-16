@@ -1,9 +1,24 @@
 """Gemini API implementation of LLMProvider"""
 import json
+import re
 from typing import Dict, Any
 from google import genai
 from app.providers.llm_provider import LLMProvider, SceneAnalysis
 from config import settings
+
+
+def _extract_json(text: str) -> dict:
+    """Extract JSON from text that may be wrapped in markdown code blocks."""
+    text = text.strip()
+    # Remove markdown code block markers
+    if text.startswith("```json"):
+        text = text[7:]
+    elif text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    text = text.strip()
+    return json.loads(text)
 
 
 class GeminiProvider(LLMProvider):
@@ -42,6 +57,8 @@ class GeminiProvider(LLMProvider):
         
         full_prompt = f"{system_prompt}\n\nText segment:\n{text}"
         
+        print(f"\n{'='*60}\n[LLM PROMPT - analyze_scene]\n{'='*60}\n{full_prompt[:500]}...\n{'='*60}")
+        
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
@@ -49,8 +66,10 @@ class GeminiProvider(LLMProvider):
             )
             result_text = response.text
             
-            # Parse JSON response
-            result = json.loads(result_text)
+            print(f"\n[LLM RESPONSE - analyze_scene]\n{'-'*60}\n{result_text[:500]}...\n{'='*60}\n")
+            
+            # Parse JSON response (handle markdown code blocks)
+            result = _extract_json(result_text)
             
             return SceneAnalysis(
                 scene=result.get("scene", ""),
@@ -59,6 +78,7 @@ class GeminiProvider(LLMProvider):
                 image_prompt=result.get("image_prompt", "")
             )
         except Exception as e:
+            print(f"\n[LLM ERROR - analyze_scene] {str(e)}\n{'='*60}\n")
             # Return default values on error
             return SceneAnalysis(
                 scene="generic scene",
@@ -100,14 +120,18 @@ class GeminiProvider(LLMProvider):
         
         Text:\n{text}"""
         
+        print(f"\n{'='*60}\n[LLM PROMPT - check_copyright]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt
             )
-            result = json.loads(response.text)
+            print(f"\n[LLM RESPONSE - check_copyright]\n{'-'*60}\n{response.text[:500]}...\n{'='*60}\n")
+            result = _extract_json(response.text)
             return result
         except Exception as e:
+            print(f"\n[LLM ERROR - check_copyright] {str(e)}\n{'='*60}\n")
             return {"status": "audit_failed", "reason": str(e), "confidence": 0.0}
     
     async def check_ethics(self, text: str) -> Dict[str, Any]:
@@ -133,12 +157,16 @@ class GeminiProvider(LLMProvider):
         
         Text:\n{text}"""
         
+        print(f"\n{'='*60}\n[LLM PROMPT - check_ethics]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        
         try:
             response = self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt
             )
-            result = json.loads(response.text)
+            print(f"\n[LLM RESPONSE - check_ethics]\n{'-'*60}\n{response.text[:500]}...\n{'='*60}\n")
+            result = _extract_json(response.text)
             return result
         except Exception as e:
+            print(f"\n[LLM ERROR - check_ethics] {str(e)}\n{'='*60}\n")
             return {"status": "audit_failed", "reason": str(e), "confidence": 0.0}

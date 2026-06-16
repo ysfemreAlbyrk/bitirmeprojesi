@@ -64,6 +64,10 @@ class LocalImageProvider(ImageGenerationProvider):
         output_filename = f"image_{uuid.uuid4()}.png"
         output_path = Path("/tmp") / output_filename
         
+        print(f"\n{'='*60}\n[IMAGE PROMPT - Local SDXL]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
+        if negative_prompt:
+            print(f"[NEGATIVE PROMPT] {negative_prompt[:200]}...")
+        
         try:
             # Generate image
             result = self._model(
@@ -78,8 +82,11 @@ class LocalImageProvider(ImageGenerationProvider):
             # Save image
             result.images[0].save(str(output_path))
             
+            print(f"\n[IMAGE RESPONSE - Local SDXL] Saved to: {output_path}\n{'='*60}\n")
+            
             return str(output_path)
         except Exception as e:
+            print(f"\n[IMAGE ERROR - Local SDXL] {str(e)}\n{'='*60}\n")
             raise RuntimeError(f"Image generation failed: {str(e)}")
     
     def is_available(self) -> bool:

@@ -174,7 +174,8 @@ async def get_book_status(
     chapters = chapter_repo.get_by_book(book_id) or []
 
     # Build processing steps with completion inference
-    audit_passed = audit is not None and audit != 'AUDIT_FAILED'
+    # Only 'approved' means passed; suspicious/violation/failed all mean audit did NOT pass
+    audit_passed = audit == 'approved'
     steps = [
         {"name": "text_extraction", "label": "Metin Çıkarma", "completed": total_chunks > 0},
         {"name": "content_audit", "label": "İçerik Denetimi", "completed": audit_passed},

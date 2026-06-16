@@ -10,6 +10,7 @@ from app.services.semantic_splitter import SemanticSplitter
 from app.providers.llm_provider import LLMProvider
 from app.providers.audio_provider import AudioGenerationProvider
 from app.providers.image_provider import ImageGenerationProvider
+from app.core.redis_client import redis_client
 from config import settings
 from app.utils.logger import get_logger
 
@@ -74,12 +75,17 @@ class BookProcessingService:
             chapters_data = extracted_data['chapters']
             logger.info(f"Extracted {len(chapters_data)} chapters, {len(full_text)} characters")
             
-            # Step 2: Audit check (can be disabled via settings)
-            if settings.audit_enabled:
+            # Step 2: Audit check (can be disabled via settings / Redis for cross-process sync)
+            try:
+                redis_val = await redis_client.get("audit_enabled")
+                audit_enabled = redis_val == "true" if redis_val is not None else settings.audit_enabled
+            except Exception:
+                audit_enabled = settings.audit_enabled
+            if audit_enabled:
                 logger.debug("Performing content audit")
                 audit_result = await self.audit_service.audit_book(full_text)
                 logger.info(f"Audit result: {audit_result}")
-                
+
                 if audit_result != AuditResult.APPROVED:
                     self.book_repo.update(book_id, {
                         'processing_status': ProcessingStatus.FAILED,
@@ -91,6 +97,14 @@ class BookProcessingService:
                 audit_result = AuditResult.APPROVED
             
             self.book_repo.update(book_id, {'audit_result': AuditResult.APPROVED})
+            
+            # Clean up any leftover chapters/chunks from previous failed attempts
+            logger.debug("Cleaning up existing chapters and chunks for retry safety")
+            try:
+                self.chunk_repo.db.client.table('text_chunks').delete().eq('book_id', book_id).execute()
+                self.chapter_repo.db.client.table('chapters').delete().eq('book_id', book_id).execute()
+            except Exception as cleanup_err:
+                logger.warning(f"Cleanup warning (may be first attempt): {cleanup_err}")
             
             # Step 3: Create chapters in database
             logger.debug(f"Creating {len(chapters_data)} chapter records")

@@ -132,8 +132,12 @@ class TextChunkRepository:
         ).eq('book_id', book_id).order('order').execute()
         # Flatten nested chapters dict into chapter_number field
         for chunk in (response.data or []):
-            if chunk.get('chapters'):
-                chunk['chapter_number'] = chunk['chapters'][0].get('chapter_number')
+            chapters = chunk.get('chapters')
+            if isinstance(chapters, list) and chapters:
+                chunk['chapter_number'] = chapters[0].get('chapter_number')
+            elif isinstance(chapters, dict):
+                chunk['chapter_number'] = chapters.get('chapter_number')
+            if 'chapters' in chunk:
                 del chunk['chapters']
         return response.data
     

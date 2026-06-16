@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from config import settings
 from app.utils.logger import setup_logger
+from app.core.redis_client import redis_client
 
 from app.api import books, reading, ambiance, admin
 from app.middleware.rate_limit import limiter, custom_rate_limit_handler
@@ -19,6 +20,18 @@ app = FastAPI(
 # Add rate limiter to state and register exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Sync audit_enabled: Redis is source of truth; fallback to settings if Redis empty."""
+    redis_val = await redis_client.get("audit_enabled")
+    if redis_val is not None:
+        settings.audit_enabled = redis_val == "true"
+        logger.info(f"Startup: audit_enabled loaded from Redis = {settings.audit_enabled}")
+    else:
+        await redis_client.set("audit_enabled", str(settings.audit_enabled).lower())
+        logger.info(f"Startup: audit_enabled synced to Redis = {settings.audit_enabled}")
 
 # CORS middleware for Flutter mobile app
 app.add_middleware(

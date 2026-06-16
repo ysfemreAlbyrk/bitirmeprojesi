@@ -1,5 +1,6 @@
 """Celery tasks for book processing"""
 import asyncio
+from pathlib import Path
 from celery import shared_task
 from app.services.book_processing_service import BookProcessingService
 from app.core.dependencies import (
@@ -47,21 +48,25 @@ def process_book_async(self, book_id: str, file_path: str, file_format: str):
             file_path=file_path,
             file_format=file_format
         ))
-        
+
         logger.info(f"Book processing completed successfully: {book_id}")
-        return {"status": "completed", "book_id": book_id}
-        
-    except Exception as e:
-        logger.error(f"Book processing failed for book_id {book_id}: {str(e)}", exc_info=True)
-        self.retry(exc=e, countdown=60, max_retries=3)
-        return {"status": "failed", "book_id": book_id, "error": str(e)}
-    finally:
-        # Clean up temp file after processing
-        from pathlib import Path
+
+        # Clean up temp file on success
         tmp = Path(file_path)
         if tmp.exists():
             tmp.unlink()
             logger.debug(f"Cleaned up temp file: {file_path}")
+
+        return {"status": "completed", "book_id": book_id}
+
+    except Exception as e:
+        logger.error(f"Book processing failed for book_id {book_id}: {str(e)}", exc_info=True)
+        # Do not retry on deterministic / config errors (ValueError, FileNotFoundError)
+        if isinstance(e, (ValueError, FileNotFoundError)):
+            logger.warning(f"Non-retryable error for book {book_id}, failing immediately")
+            raise
+        self.retry(exc=e, countdown=60, max_retries=3)
+        # self.retry() raises a Retry exception; code below never runs
 
 
 @shared_task(name="cleanup_temp_files")

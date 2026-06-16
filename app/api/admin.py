@@ -4,13 +4,14 @@ import time
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query, Header
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from config import settings
 from app.core.dependencies import get_database, get_llm_provider, get_audio_provider, get_image_provider
 from app.core.storage import StorageService
+from app.core.redis_client import redis_client
 from app.utils.logger import get_logger
 
 logger = get_logger("vibetale")
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates/admin")
 
 
-def _verify_admin_key(key: Optional[str] = None, x_admin_key: Optional[str] = None):
+def _verify_admin_key(key: Optional[str] = None, x_admin_key: Optional[str] = Header(None)):
     """Simple admin key verification."""
     effective_key = (x_admin_key or key or "").strip()
     if not settings.admin_dashboard_enabled:
@@ -34,7 +35,7 @@ def _verify_admin_key(key: Optional[str] = None, x_admin_key: Optional[str] = No
 async def admin_dashboard(
     request: Request,
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ):
     """Render admin dashboard HTML."""
     _verify_admin_key(key, x_admin_key)
@@ -44,7 +45,7 @@ async def admin_dashboard(
 @router.get("/api/stats")
 async def admin_stats(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get backend statistics."""
     _verify_admin_key(key, x_admin_key)
@@ -56,32 +57,32 @@ async def admin_stats(
     stats = {}
     for status in statuses:
         try:
-            resp = db.client.table("books").select("*").eq("processing_status", status).execute()
-            stats[status] = len(resp.data) if resp.data else 0
+            resp = db.client.table("books").select("id", count="exact", head=True).eq("processing_status", status).execute()
+            stats[status] = resp.count or 0
         except Exception:
             stats[status] = 0
 
     try:
-        resp = db.client.table("books").select("*").execute()
-        stats["total_books"] = len(resp.data) if resp.data else 0
+        resp = db.client.table("books").select("id", count="exact", head=True).execute()
+        stats["total_books"] = resp.count or 0
     except Exception:
         stats["total_books"] = 0
 
     try:
-        resp = db.client.table("text_chunks").select("*").execute()
-        stats["total_chunks"] = len(resp.data) if resp.data else 0
+        resp = db.client.table("text_chunks").select("id", count="exact", head=True).execute()
+        stats["total_chunks"] = resp.count or 0
     except Exception:
         stats["total_chunks"] = 0
 
     try:
-        resp = db.client.table("reading_sessions").select("*").execute()
-        stats["total_sessions"] = len(resp.data) if resp.data else 0
+        resp = db.client.table("reading_sessions").select("id", count="exact", head=True).execute()
+        stats["total_sessions"] = resp.count or 0
     except Exception:
         stats["total_sessions"] = 0
 
     try:
-        resp = db.client.table("users").select("*").execute()
-        stats["total_users"] = len(resp.data) if resp.data else 0
+        resp = db.client.table("users").select("id", count="exact", head=True).execute()
+        stats["total_users"] = resp.count or 0
     except Exception:
         stats["total_users"] = 0
 
@@ -92,7 +93,7 @@ async def admin_stats(
 async def admin_books(
     limit: int = Query(10, ge=1, le=50),
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get recent books."""
     _verify_admin_key(key, x_admin_key)
@@ -109,7 +110,7 @@ async def admin_books(
 @router.get("/api/health")
 async def admin_health(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get provider and system health status."""
     _verify_admin_key(key, x_admin_key)
@@ -117,6 +118,12 @@ async def admin_health(
     llm = get_llm_provider()
     audio = get_audio_provider()
     image = get_image_provider()
+
+    # Check provider availability in threadpool to avoid blocking event loop
+    import asyncio
+    llm_available = await asyncio.to_thread(llm.is_available)
+    audio_available = await asyncio.to_thread(audio.is_available)
+    image_available = await asyncio.to_thread(image.is_available)
 
     # Check Supabase
     db = get_database()
@@ -127,11 +134,11 @@ async def admin_health(
     except Exception:
         pass
 
-    # Check Redis
+    # Check Redis (fast timeout so it doesn't block if Redis is down)
     redis_ok = False
     try:
         import redis as redis_lib
-        r = redis_lib.from_url(settings.redis_url)
+        r = redis_lib.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
         r.ping()
         redis_ok = True
     except Exception:
@@ -140,15 +147,15 @@ async def admin_health(
     return {
         "llm_provider": {
             "name": settings.llm_provider,
-            "available": llm.is_available()
+            "available": llm_available
         },
         "audio_provider": {
             "name": settings.stable_audio_model,
-            "available": audio.is_available()
+            "available": audio_available
         },
         "image_provider": {
             "name": settings.image_generation_model,
-            "available": image.is_available()
+            "available": image_available
         },
         "supabase": {"available": db_ok},
         "redis": {"available": redis_ok},
@@ -159,7 +166,7 @@ async def admin_health(
 @router.get("/api/gpu")
 async def admin_gpu(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get GPU/VRAM usage."""
     _verify_admin_key(key, x_admin_key)
@@ -188,7 +195,7 @@ async def admin_gpu(
 async def admin_logs(
     lines: int = Query(50, ge=1, le=200),
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get recent log lines."""
     _verify_admin_key(key, x_admin_key)
@@ -220,7 +227,7 @@ async def admin_logs(
 async def admin_book_detail(
     book_id: str,
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get detailed book info with chapters and media."""
     _verify_admin_key(key, x_admin_key)
@@ -253,7 +260,7 @@ async def admin_book_detail(
 async def admin_delete_book(
     book_id: str,
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Delete a book and its related data."""
     _verify_admin_key(key, x_admin_key)
@@ -269,7 +276,8 @@ async def admin_delete_book(
             url = media.get("storage_url", "")
             if url:
                 # Extract object name from URL
-                parts = url.split("/storage/v1/object/public/media-assets/")
+                bucket = settings.storage_bucket_name
+                parts = url.split(f"/storage/v1/object/public/{bucket}/")
                 if len(parts) > 1:
                     object_name = parts[1]
                     try:
@@ -290,7 +298,7 @@ async def admin_delete_book(
 async def admin_users(
     limit: int = Query(20, ge=1, le=100),
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get user list."""
     _verify_admin_key(key, x_admin_key)
@@ -307,7 +315,7 @@ async def admin_users(
 @router.get("/api/system")
 async def admin_system(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get system metrics (CPU, RAM, disk, uptime)."""
     _verify_admin_key(key, x_admin_key)
@@ -318,7 +326,7 @@ async def admin_system(
         import psutil as ps
         result["uptime_seconds"] = int(time.time() - ps.boot_time())
         # CPU
-        result["cpu_percent"] = ps.cpu_percent(interval=0.5)
+        result["cpu_percent"] = ps.cpu_percent(interval=0.1)
         result["cpu_count"] = ps.cpu_count()
         # RAM
         mem = ps.virtual_memory()
@@ -357,8 +365,14 @@ def _celery_worker_count() -> int:
     try:
         from celery import Celery
         from config import settings
-        app = Celery("vibetale", broker=settings.celery_broker_url)
-        inspect = app.control.inspect()
+        # Short timeout so it doesn't block if broker is down
+        app = Celery(
+            "vibetale",
+            broker=settings.celery_broker_url,
+            broker_connection_timeout=1,
+            broker_connection_retry_on_startup=False,
+        )
+        inspect = app.control.inspect(timeout=1.0)
         ping = inspect.ping()
         app.close()
         return len(ping) if ping else 0
@@ -369,7 +383,7 @@ def _celery_worker_count() -> int:
 @router.get("/api/celery")
 async def admin_celery(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get Celery worker status and active tasks."""
     _verify_admin_key(key, x_admin_key)
@@ -378,8 +392,14 @@ async def admin_celery(
 
     try:
         from celery import Celery
-        app = Celery("vibetale", broker=settings.celery_broker_url)
-        inspect = app.control.inspect()
+        # Short timeout so it doesn't block if broker is down
+        app = Celery(
+            "vibetale",
+            broker=settings.celery_broker_url,
+            broker_connection_timeout=1,
+            broker_connection_retry_on_startup=False,
+        )
+        inspect = app.control.inspect(timeout=1.0)
 
         # Ping workers
         ping = inspect.ping()
@@ -414,7 +434,7 @@ async def admin_celery(
 @router.get("/api/storage")
 async def admin_storage(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
     """Get storage bucket info and media count."""
     _verify_admin_key(key, x_admin_key)
@@ -424,13 +444,13 @@ async def admin_storage(
 
     try:
         # Count media assets by type
-        audio_resp = db.client.table("media_assets").select("count").eq("asset_type", "audio").execute()
-        image_resp = db.client.table("media_assets").select("count").eq("asset_type", "image").execute()
+        audio_resp = db.client.table("media_assets").select("id", count="exact", head=True).eq("asset_type", "audio").execute()
+        image_resp = db.client.table("media_assets").select("id", count="exact", head=True).eq("asset_type", "image").execute()
 
-        result["audio_count"] = len(audio_resp.data) if audio_resp.data else 0
-        result["image_count"] = len(image_resp.data) if image_resp.data else 0
+        result["audio_count"] = audio_resp.count or 0
+        result["image_count"] = image_resp.count or 0
         result["total_media"] = result["audio_count"] + result["image_count"]
-        result["bucket"] = "media-assets"
+        result["bucket"] = settings.storage_bucket_name
     except Exception as e:
         result["error"] = str(e)
 
@@ -440,21 +460,37 @@ async def admin_storage(
 @router.get("/api/settings/audit")
 async def get_audit_setting(
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
-    """Get current audit enabled setting."""
+    """Get current audit enabled setting (from Redis for cross-process consistency)."""
     _verify_admin_key(key, x_admin_key)
-    return {"audit_enabled": settings.audit_enabled}
+    try:
+        redis_val = await redis_client.get("audit_enabled")
+        audit_enabled = redis_val == "true" if redis_val is not None else settings.audit_enabled
+    except Exception:
+        # Redis unreachable — fallback to in-memory settings
+        audit_enabled = settings.audit_enabled
+    return {"audit_enabled": audit_enabled}
 
 
 @router.post("/api/settings/audit")
 async def toggle_audit_setting(
-    enabled: bool,
+    request_data: Dict[str, Any],
     key: Optional[str] = Query(None),
-    x_admin_key: Optional[str] = None,
+    x_admin_key: Optional[str] = Header(None),
 ) -> Dict[str, Any]:
-    """Toggle content audit on/off."""
+    """Toggle content audit on/off (persisted to Redis so Celery workers see it)."""
     _verify_admin_key(key, x_admin_key)
-    settings.audit_enabled = enabled
-    logger.info(f"Content audit setting changed to: {enabled}")
-    return {"audit_enabled": settings.audit_enabled, "message": f"Audit {'enabled' if enabled else 'disabled'}"}
+    enabled = request_data.get("enabled")
+    if enabled is None:
+        raise HTTPException(status_code=422, detail="Missing 'enabled' field in request body")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=422, detail="'enabled' must be a boolean")
+    enabled_bool = enabled
+    settings.audit_enabled = enabled_bool
+    try:
+        await redis_client.set("audit_enabled", str(enabled_bool).lower())
+    except Exception as e:
+        logger.warning(f"Redis unavailable during audit toggle, settings updated only: {e}")
+    logger.info(f"Content audit setting changed to: {enabled_bool}")
+    return {"audit_enabled": enabled_bool, "message": f"Audit {'enabled' if enabled_bool else 'disabled'}"}

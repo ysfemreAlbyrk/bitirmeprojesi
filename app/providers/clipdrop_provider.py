@@ -3,6 +3,7 @@ import httpx
 from pathlib import Path
 from typing import Optional
 from app.providers.image_provider import ImageGenerationProvider
+from app.utils.api_logger import ApiCallTimer
 from config import settings
 
 
@@ -51,33 +52,35 @@ class ClipdropProvider(ImageGenerationProvider):
         }
         
         print(f"\n{'='*60}\n[IMAGE PROMPT - Clipdrop]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
-        
+
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    self.api_url,
-                    headers=headers,
-                    files=files,
-                    timeout=30.0
-                )
-                
+                with ApiCallTimer("Clipdrop", "POST /text-to-image/v1", f"prompt_len={len(prompt)}") as timer:
+                    response = await client.post(
+                        self.api_url,
+                        headers=headers,
+                        files=files,
+                        timeout=30.0
+                    )
+                    timer.status = f"{response.status_code}"
+
                 if response.status_code == 200:
                     # Save image to file
                     with open(output_path, "wb") as f:
                         f.write(response.content)
-                    
+
                     # Log credit usage
                     remaining_credits = response.headers.get("x-remaining-credits", "unknown")
                     credits_consumed = response.headers.get("x-credits-consumed", "unknown")
-                    
+
                     print(f"\n[IMAGE RESPONSE - Clipdrop] Status: 200 OK | Saved to: {output_path} | Credits: {credits_consumed}/{remaining_credits}\n{'='*60}\n")
-                    
+
                     return str(output_path)
                 else:
                     error_detail = response.json() if response.headers.get("content-type") == "application/json" else response.text
                     print(f"\n[IMAGE ERROR - Clipdrop] Status: {response.status_code} - {error_detail}\n{'='*60}\n")
                     raise RuntimeError(f"Clipdrop API error: {response.status_code} - {error_detail}")
-                    
+
         except httpx.TimeoutException:
             raise RuntimeError("Clipdrop API request timed out")
         except Exception as e:

@@ -36,6 +36,7 @@ dependencies = [
     "psutil",
     "safetensors>=0.8.0",
     "cryptography",
+    "pyjwt",
 ]
 
 [build-system]

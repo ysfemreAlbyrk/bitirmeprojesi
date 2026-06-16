@@ -8,7 +8,11 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         :root { --bg:#09090b; --card:#18181b; --border:#27272a; --muted:#27272a; --fg:#fafafa; --muted-fg:#a1a1aa; --accent:#27272a; --radius:0.75rem; }
         body { font-family: Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); line-height:1.5; font-size:14px; -webkit-font-smoothing:antialiased; }
-        header { padding:1.25rem 2rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:baseline; background:var(--bg); position:sticky; top:0; z-index:50; }
+        header { padding:1.25rem 2rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; background:var(--bg); position:sticky; top:0; z-index:50; }
+        .header-right { display:flex; align-items:center; gap:0.75rem; }
+        .btn-refresh { background:transparent; border:1px solid var(--border); color:var(--muted-fg); border-radius:6px; padding:0.35rem 0.7rem; font-size:0.75rem; cursor:pointer; display:flex; align-items:center; gap:0.4rem; transition:all .15s; }
+        .btn-refresh:hover { background:var(--accent); color:var(--fg); }
+        .btn-refresh:active { transform:scale(0.96); }
         header h1 { font-size:1.25rem; font-weight:600; letter-spacing:-0.025em; }
         .meta { color:var(--muted-fg); font-size:0.8rem; font-variant-numeric:tabular-nums; }
         .container { max-width:1280px; margin:0 auto; padding:2rem; display:flex; flex-direction:column; gap:1.5rem; }
@@ -97,7 +101,13 @@
 <body>
     <header>
         <h1>VibeTale</h1>
-        <span class="meta">admin / <span id="timer">30</span>s <span class="spin" id="spinner" style="display:none;"></span></span>
+        <div class="header-right">
+            <button class="btn-refresh" id="btn-refresh" onclick="refreshAll()" title="Yenile">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Yenile
+            </button>
+            <span class="meta">auto <span id="timer">30</span>s <span class="spin" id="spinner" style="display:none;"></span></span>
+        </div>
     </header>
 
     <div class="container">
@@ -182,9 +192,15 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-h"><div class="card-t">Logs</div><div class="card-d">Recent errors</div></div>
-            <div class="card-c"><div class="log" id="log-panel"></div></div>
+        <div class="grid2">
+            <div class="card">
+                <div class="card-h"><div class="card-t">Storage</div><div class="card-d">Media assets</div></div>
+                <div class="card-c" id="storage-panel"></div>
+            </div>
+            <div class="card">
+                <div class="card-h"><div class="card-t">Logs</div><div class="card-d">Recent errors</div></div>
+                <div class="card-c"><div class="log" id="log-panel"></div></div>
+            </div>
         </div>
     </div>
 
@@ -200,11 +216,17 @@
         const HEADERS = ADMIN_KEY ? {'X-Admin-Key': ADMIN_KEY} : {};
         const API_BASE = '/admin/api';
 
-        async function fetchJSON(endpoint) {
+        async function fetchJSON(endpoint, timeoutMs = 8000) {
             const url = `${API_BASE}${endpoint}${ADMIN_KEY ? (endpoint.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(ADMIN_KEY) : ''}`;
-            const res = await fetch(url, {headers: HEADERS});
-            if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-            return res.json();
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, {headers: HEADERS, signal: ctrl.signal});
+                if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+                return res.json();
+            } finally {
+                clearTimeout(timer);
+            }
         }
 
         async function loadStats() {
@@ -452,7 +474,19 @@
             status.textContent = 'Saving…';
             status.style.color = 'var(--muted-fg)';
             try {
-                const resp = await fetch(`${BASE}/settings/audit?enabled=${enabled}&key=${encodeURIComponent(KEY)}`);
+                const query = ADMIN_KEY ? `?key=${encodeURIComponent(ADMIN_KEY)}` : '';
+                const resp = await fetch(`${API_BASE}/settings/audit${query}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...HEADERS
+                    },
+                    body: JSON.stringify({enabled: enabled})
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(`${resp.status}: ${text}`);
+                }
                 const d = await resp.json();
                 status.textContent = d.audit_enabled ? 'Audit enabled — all books checked' : 'Audit disabled — books auto-approved';
                 status.style.color = d.audit_enabled ? '#4ade80' : '#f87171';
@@ -469,7 +503,12 @@
             const spinner = document.getElementById('spinner');
             spinner.style.display = 'inline-block';
             try {
-                await Promise.all([loadStats(), loadBooks(), loadHealth(), loadGPU(), loadSystem(), loadCelery(), loadUsers(), loadStorage(), loadLogs(), loadAuditSetting()]);
+                // Use allSettled so one slow/failing endpoint doesn't block the rest
+                await Promise.allSettled([
+                    loadStats(), loadBooks(), loadHealth(), loadGPU(),
+                    loadSystem(), loadCelery(), loadUsers(), loadStorage(),
+                    loadLogs(), loadAuditSetting()
+                ]);
             } catch (e) {
                 console.error('Refresh failed:', e);
             } finally {

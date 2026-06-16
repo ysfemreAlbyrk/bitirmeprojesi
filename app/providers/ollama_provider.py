@@ -2,6 +2,7 @@
 import httpx
 from typing import Dict, Any
 from app.providers.llm_provider import LLMProvider, SceneAnalysis
+from app.utils.api_logger import ApiCallTimer
 from config import settings
 
 
@@ -38,8 +39,10 @@ class OllamaProvider(LLMProvider):
         
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
+                with ApiCallTimer("Ollama", f"POST /api/generate", f"model={self.model}") as timer:
+                    response = await client.post(url, json=payload)
+                    response.raise_for_status()
+                    timer.status = f"{response.status_code} OK"
                 result = response.json()
                 response_text = result.get("response", "")
                 print(f"\n[LLM RESPONSE - Ollama]\n{'-'*60}\n{response_text[:500]}...\n{'='*60}\n")
@@ -185,7 +188,7 @@ class OllamaProvider(LLMProvider):
     def is_available(self) -> bool:
         """
         Check if Ollama service is available.
-        
+
         Returns:
             True if service is available, False otherwise
         """
@@ -193,7 +196,9 @@ class OllamaProvider(LLMProvider):
             url = f"{self.base_url}/api/tags"
             import httpx
             with httpx.Client(timeout=5.0) as client:
-                response = client.get(url)
+                with ApiCallTimer("Ollama", "GET /api/tags", f"model={self.model}") as timer:
+                    response = client.get(url)
+                    timer.status = f"{response.status_code}"
                 return response.status_code == 200
         except Exception:
             return False

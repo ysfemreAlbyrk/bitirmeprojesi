@@ -1,142 +1,86 @@
 """Stable Audio 3 Small SFX implementation of AudioGenerationProvider"""
-import os
+import sys
 import uuid
 from pathlib import Path
 from typing import Optional
 
+# Allow importing from local git submodule without pip install
+_sys_path_add = str(Path(__file__).parent.parent.parent / "stable-audio-3")
+if _sys_path_add not in sys.path:
+    sys.path.insert(0, _sys_path_add)
+
+from huggingface_hub import login
+
 from app.providers.audio_provider import AudioGenerationProvider
+from app.utils.api_logger import ApiCallTimer
 from app.utils.logger import get_logger
 
 logger = get_logger("vibetale")
 
-# Lazy singleton for model instance
-_model_instance = None
-_model_device = None
-_model_sample_rate = 44100  # SAME autoencoder: 44.1 kHz stereo
+_model = None
 
 
 def _get_model():
-    """Lazy-load Stable Audio 3 Small SFX model (singleton)."""
-    global _model_instance, _model_device
-    if _model_instance is None:
-        try:
-            import torch
-            from stable_audio_3 import StableAudioModel
-            from config import settings
-
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"Loading Stable Audio 3 Small SFX on {device} ...")
-
-            # Lokal model klasörü (config.py'deki dosya yolundan klasörü bul)
-            model_dir = os.path.dirname(os.path.abspath(settings.stable_audio_model_path))
-            logger.info(f"Loading model from local directory: {model_dir}")
-            model = StableAudioModel.from_pretrained(model_dir)
-            model = model.to(device)
-
-            if device == "cuda":
-                model = model.half()  # float16 for VRAM efficiency
-                torch.cuda.empty_cache()
-
-            _model_instance = model
-            _model_device = device
-            logger.info("Stable Audio 3 Small SFX loaded successfully.")
-        except ImportError as exc:
-            logger.error(
-                "stable-audio-3 package not found. "
-                "Please clone https://github.com/Stability-AI/stable-audio-3 and install it."
-            )
-            raise RuntimeError(
-                "stable-audio-3 is required. Install: "
-                "pip install git+https://github.com/Stability-AI/stable-audio-3.git"
-            ) from exc
-    return _model_instance
+    global _model
+    if _model is None:
+        from config import settings
+        from stable_audio_3 import StableAudioModel
+        if settings.hf_token:
+            login(token=settings.hf_token)
+        model_name = settings.stable_audio_model
+        logger.info(f"Loading Stable Audio 3: {model_name}")
+        with ApiCallTimer("StableAudio", "from_pretrained", f"model={model_name}") as t:
+            _model = StableAudioModel.from_pretrained(model_name)
+            t.status = "loaded"
+        logger.info("Stable Audio 3 loaded.")
+    return _model
 
 
 class StableAudioProvider(AudioGenerationProvider):
-    """Stable Audio 3 Small SFX provider for ambient audio generation."""
+    """Stable Audio 3 Small SFX provider."""
 
-    async def generate_audio(
-        self,
-        prompt: str,
-        duration: int = 8,
-        negative_prompt: Optional[str] = None
-    ) -> str:
-        """
-        Generate ambient audio from a text prompt.
-
-        Args:
-            prompt: Text description of the desired audio
-            duration: Duration in seconds (default: 8)
-            negative_prompt: What to avoid in the audio generation
-
-        Returns:
-            Path to the generated audio file
-        """
+    async def generate_audio(self, prompt: str, duration: int = 8, negative_prompt: Optional[str] = None) -> str:
         import torch
         import torchaudio
 
         model = _get_model()
-        device = _model_device
 
-        if negative_prompt is None:
-            negative_prompt = "music, speech, noise, distortion"
+        with ApiCallTimer("StableAudio", "generate", f"duration={duration}s") as t:
+            audio = model.generate(prompt=prompt, duration=duration)
+            t.status = "ok"
 
-        print(f"\n{'='*60}\n[AUDIO PROMPT - Stable Audio 3]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
-        print(f"[AUDIO PARAMS] duration={duration}s | negative_prompt={negative_prompt}")
+        output_path = Path(f"/tmp/audio_{uuid.uuid4()}.wav")
+        sr = 44100
 
-        logger.info(f"Generating {duration}s audio with Stable Audio 3: {prompt[:60]}...")
-
-        with torch.no_grad():
-            if device == "cuda":
-                with torch.cuda.amp.autocast():
-                    audio = model.generate(
-                        prompt=prompt,
-                        duration=duration
-                    )
-            else:
-                audio = model.generate(
-                    prompt=prompt,
-                    duration=duration
-                )
-
-        # Normalize and save
-        output_filename = f"audio_{uuid.uuid4()}.wav"
-        output_path = Path("/tmp") / output_filename
-
-        # audio shape handling: ensure [channels, samples]
         if isinstance(audio, tuple):
             audio, sr = audio
-        else:
-            sr = _model_sample_rate
 
+        if not isinstance(audio, torch.Tensor):
+            audio = torch.tensor(audio)
+
+        audio = audio.cpu().to(torch.float32)
+
+        # Ensure [channels, samples] for torchaudio.save
         if audio.dim() == 1:
             audio = audio.unsqueeze(0)
+        elif audio.dim() == 3:
+            audio = audio[0] if audio.shape[0] > 1 else audio.squeeze(0)
         elif audio.dim() == 2 and audio.shape[0] > 2:
             audio = audio.transpose(0, 1)
 
-        # Peak normalize
-        audio = audio.to(torch.float32)
-        peak = torch.max(torch.abs(audio))
-        if peak > 0:
-            audio = audio / peak
-        audio = audio.clamp(-1, 1)
+        if audio.dim() != 2:
+            audio = audio.view(1, -1)
 
-        torchaudio.save(str(output_path), audio.cpu(), sr)
+        peak = torch.max(torch.abs(audio)) or 1
+        audio = (audio / peak).clamp(-1, 1)
+
+        torchaudio.save(str(output_path), audio, sr)
         logger.info(f"Audio saved to {output_path}")
-        
-        print(f"\n[AUDIO RESPONSE - Stable Audio 3] Saved to: {output_path} | duration={duration}s | sr={sr}Hz\n{'='*60}\n")
-
         return str(output_path)
 
     def is_available(self) -> bool:
-        """
-        Check if the audio generation service is available.
-
-        Returns:
-            True if service is available, False otherwise
-        """
         try:
-            import stable_audio_3  # noqa: F401
+            import stable_audio_3
             return True
         except ImportError:
             return False

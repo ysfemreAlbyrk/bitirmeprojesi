@@ -5,7 +5,7 @@ from config import settings
 from app.utils.logger import setup_logger
 from app.core.redis_client import redis_client
 
-from app.api import books, reading, ambiance, admin
+from app.api import books, reading, ambiance, admin, library, me, leaderboard, discovery
 from app.middleware.rate_limit import limiter, custom_rate_limit_handler
 
 # Setup logging
@@ -47,6 +47,10 @@ app.include_router(books.router)
 app.include_router(reading.router)
 app.include_router(ambiance.router)
 app.include_router(admin.router)
+app.include_router(library.router)
+app.include_router(me.router)
+app.include_router(leaderboard.router)
+app.include_router(discovery.router)
 
 
 @app.get("/")

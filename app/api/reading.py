@@ -31,10 +31,18 @@ async def create_reading_session(
 async def update_reading_session(
     session_id: str,
     update: ReadingSessionUpdate,
-    db: Database = Depends(get_database)
+    user_id: str = Depends(get_current_user_id),
+    db: Database = Depends(get_database),
 ):
-    """End or update a reading session."""
-    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    """End or update a reading session (ownership enforced)."""
+    existing = db.client.table('reading_sessions').select('user_id').eq('id', session_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Reading session not found")
+    if existing.data[0]['user_id'] != user_id:
+        raise HTTPException(status_code=403, detail="Bu oturuma erişim izniniz yok")
+
+    # mode='json' serializes datetime -> ISO string so PostgREST can encode it.
+    update_data = {k: v for k, v in update.model_dump(mode='json').items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     response = db.client.table('reading_sessions').update(update_data).eq('id', session_id).execute()

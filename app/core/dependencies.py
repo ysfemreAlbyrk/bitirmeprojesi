@@ -2,7 +2,7 @@
 from fastapi import Depends
 from typing import AsyncGenerator
 
-from app.core.database import Database, BookRepository, ChapterRepository, TextChunkRepository, ReadingProgressRepository
+from app.core.database import Database, BookRepository, ChapterRepository, TextChunkRepository, ReadingProgressRepository, UserLibraryRepository
 from app.core.storage import StorageService
 from app.providers.llm_provider import LLMProvider
 from app.providers.audio_provider import AudioGenerationProvider
@@ -99,6 +99,13 @@ def get_reading_progress_repository(
 ) -> ReadingProgressRepository:
     """Get reading progress repository instance"""
     return ReadingProgressRepository(db)
+
+
+def get_user_library_repository(
+    db: Database = Depends(get_database)
+) -> UserLibraryRepository:
+    """Get user library repository instance"""
+    return UserLibraryRepository(db)
 
 
 def get_audit_service(

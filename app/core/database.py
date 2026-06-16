@@ -2,6 +2,7 @@
 from supabase import create_client, Client
 from config import settings
 from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
 from app.utils.logger import get_logger
 
 logger = get_logger("vibetale")
@@ -80,6 +81,26 @@ class BookRepository:
         """Delete a book record"""
         response = self.db.client.table('books').delete().eq('id', book_id).execute()
         return len(response.data) > 0
+
+    def get_public(self, category: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """Public, processed books for the discovery catalog."""
+        query = self.db.client.table('books').select('*').eq(
+            'is_public', True).eq('processing_status', 'completed')
+        if category:
+            query = query.eq('genre', category)
+        response = query.limit(limit).execute()
+        return response.data or []
+
+    def get_public_categories(self) -> List[str]:
+        """Distinct genres across public books."""
+        response = self.db.client.table('books').select('genre').eq(
+            'is_public', True).eq('processing_status', 'completed').execute()
+        seen = []
+        for row in (response.data or []):
+            g = row.get('genre')
+            if g and g not in seen:
+                seen.append(g)
+        return seen
 
 
 class ChapterRepository:
@@ -170,5 +191,63 @@ class ReadingProgressRepository:
             response = self.db.client.table('reading_progress').update(progress_data).eq('id', existing['id']).execute()
         else:
             response = self.db.client.table('reading_progress').insert(progress_data).execute()
-        
+
         return response.data[0] if response.data else None
+
+
+class UserLibraryRepository:
+    """Repository for the per-user library (reading status + favorites)."""
+
+    def __init__(self, db: Database = None):
+        self.db = db or Database()
+
+    def get_entry(self, user_id: str, book_id: str) -> Optional[Dict[str, Any]]:
+        """Get a user's library entry for a book."""
+        response = self.db.client.table('user_library').select('*').eq(
+            'user_id', user_id).eq('book_id', book_id).execute()
+        return response.data[0] if response.data else None
+
+    def list_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        """List a user's library entries with the joined book record."""
+        response = self.db.client.table('user_library').select(
+            '*, books(*)').eq('user_id', user_id).execute()
+        return response.data or []
+
+    def set_state(
+        self,
+        user_id: str,
+        book_id: str,
+        reading_status: Optional[str] = None,
+        is_favorite: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        """Create or update a library entry; adds the book if not present."""
+        existing = self.get_entry(user_id, book_id)
+        data: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc).isoformat()}
+        if reading_status is not None:
+            data['reading_status'] = reading_status
+        if is_favorite is not None:
+            data['is_favorite'] = is_favorite
+
+        if existing:
+            response = self.db.client.table('user_library').update(data).eq(
+                'id', existing['id']).execute()
+        else:
+            data['user_id'] = user_id
+            data['book_id'] = book_id
+            response = self.db.client.table('user_library').insert(data).execute()
+        return response.data[0] if response.data else None
+
+    def add_if_absent(self, user_id: str, book_id: str, reading_status: str = 'reading') -> None:
+        """Ensure a library entry exists (used on upload)."""
+        if not self.get_entry(user_id, book_id):
+            self.db.client.table('user_library').insert({
+                'user_id': user_id,
+                'book_id': book_id,
+                'reading_status': reading_status,
+            }).execute()
+
+    def remove(self, user_id: str, book_id: str) -> bool:
+        """Remove a book from the user's library."""
+        response = self.db.client.table('user_library').delete().eq(
+            'user_id', user_id).eq('book_id', book_id).execute()
+        return len(response.data) > 0

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from typing import List
 import uuid
+import tempfile
 from pathlib import Path
 import aiofiles
 from app.utils.logger import get_logger
@@ -14,7 +15,7 @@ from app.core.auth import get_current_user_id
 logger = get_logger("vibetale")
 
 from app.models.book import Book, BookCreate, BookResponse, ProcessingStatus
-from app.core.database import BookRepository, TextChunkRepository, ChapterRepository
+from app.core.database import BookRepository, TextChunkRepository, ChapterRepository, UserLibraryRepository
 from app.services.book_processing_service import BookProcessingService
 from app.core.storage import StorageService
 from app.core.dependencies import (
@@ -22,11 +23,20 @@ from app.core.dependencies import (
     get_book_repository,
     get_storage_service,
     get_text_chunk_repository,
-    get_chapter_repository
+    get_chapter_repository,
+    get_user_library_repository,
 )
 from config import settings
 
 router = APIRouter(prefix="/books", tags=["books"])
+
+
+def _validate_book_id(book_id: str) -> None:
+    """Reject non-UUID ids with a clean 404 instead of a Postgres 500."""
+    try:
+        uuid.UUID(book_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Book not found")
 
 
 @router.post("/upload", response_model=BookResponse)
@@ -35,6 +45,7 @@ async def upload_book(
     processing_service: BookProcessingService = Depends(get_book_processing_service),
     storage_service: StorageService = Depends(get_storage_service),
     book_repo: BookRepository = Depends(get_book_repository),
+    lib_repo: UserLibraryRepository = Depends(get_user_library_repository),
     user_id: str = Depends(get_current_user_id),
 ):
     """Upload and process a new book"""
@@ -43,7 +54,11 @@ async def upload_book(
     file_content = await file.read()
     file_size = len(file_content)
 
-    temp_file_path = Path(f"/tmp/{uuid.uuid4()}_{file.filename}")
+    # Local fix: use the OS temp dir (Windows has no /tmp) and an ASCII-only
+    # temp name (uuid + extension) so non-ASCII filenames don't break MIME
+    # detection / file opening during validation.
+    temp_suffix = Path(file.filename or "").suffix
+    temp_file_path = Path(tempfile.gettempdir()) / f"{uuid.uuid4()}{temp_suffix}"
     async with aiofiles.open(temp_file_path, 'wb') as f:
         await f.write(file_content)
 
@@ -79,6 +94,9 @@ async def upload_book(
         book_data['id'] = str(uuid.uuid4())
         book_data['file_url'] = file_url
         book_record = book_repo.create(book_data)
+
+        # Add the uploaded book to the owner's library (Reading tab).
+        lib_repo.add_if_absent(user_id, book_record['id'])
 
         logger.info(f"Submitting book processing task to Celery: {book_record['id']}")
         process_book_async.delay(
@@ -133,6 +151,7 @@ async def get_book(
     user_id: str = Depends(get_current_user_id),
 ):
     """Get book details by ID."""
+    _validate_book_id(book_id)
     book = book_repo.get_by_id(book_id)
 
     if not book:
@@ -153,6 +172,7 @@ async def get_book_status(
     user_id: str = Depends(get_current_user_id),
 ):
     """Get detailed processing status of a book with step-by-step progress."""
+    _validate_book_id(book_id)
     book = book_repo.get_by_id(book_id)
 
     if not book:
@@ -223,6 +243,7 @@ async def get_book_chunks(
     user_id: str = Depends(get_current_user_id),
 ):
     """Get all text chunks for a book, ordered by sequence (for the reader)."""
+    _validate_book_id(book_id)
     book = book_repo.get_by_id(book_id)
 
     if not book:
@@ -256,6 +277,7 @@ async def delete_book(
     user_id: str = Depends(get_current_user_id),
 ):
     """Delete a book and all associated media."""
+    _validate_book_id(book_id)
     book = book_repo.get_by_id(book_id)
 
     if not book:

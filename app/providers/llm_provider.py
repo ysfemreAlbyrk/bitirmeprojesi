@@ -1,6 +1,6 @@
 """LLM Provider abstraction for text analysis"""
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, List
 from dataclasses import dataclass
 
 
@@ -55,6 +55,24 @@ class LLMProvider(ABC):
         """
         pass
     
+    async def detect_scene_boundaries(self, paragraphs: List[str]) -> List[int]:
+        """
+        Detect semantic scene boundaries across a list of paragraphs.
+
+        A boundary marks the index of a paragraph where a NEW scene begins
+        (change of location, time, mood, or narrative event). Index 0 is an
+        implicit boundary and need not be returned.
+
+        Args:
+            paragraphs: Ordered paragraphs of a chapter/section
+
+        Returns:
+            Sorted list of paragraph indices (1-based positions within the list)
+            where a new scene starts. An empty list means "no semantic split
+            available" and callers should fall back to rule-based splitting.
+        """
+        return []
+
     @abstractmethod
     def is_available(self) -> bool:
         """Check if the provider is available and configured."""

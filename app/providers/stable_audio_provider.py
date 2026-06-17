@@ -45,8 +45,11 @@ class StableAudioProvider(AudioGenerationProvider):
 
         model = _get_model()
 
+        gen_kwargs = {"prompt": prompt, "duration": duration}
+        if negative_prompt:
+            gen_kwargs["negative_prompt"] = negative_prompt
         with ApiCallTimer("StableAudio", "generate", f"duration={duration}s") as t:
-            audio = model.generate(prompt=prompt, duration=duration)
+            audio = model.generate(**gen_kwargs)
             t.status = "ok"
 
         output_path = Path(f"/tmp/audio_{uuid.uuid4()}.wav")

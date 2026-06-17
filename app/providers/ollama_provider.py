@@ -1,6 +1,8 @@
 """Ollama implementation of LLMProvider"""
+import json
+import re
 import httpx
-from typing import Dict, Any
+from typing import Dict, Any, List
 from app.providers.llm_provider import LLMProvider, SceneAnalysis
 from app.utils.api_logger import ApiCallTimer
 from config import settings
@@ -185,6 +187,28 @@ class OllamaProvider(LLMProvider):
         except Exception as e:
             return {"status": "audit_failed", "reason": str(e), "confidence": 0.0}
     
+    async def detect_scene_boundaries(self, paragraphs: List[str]) -> List[int]:
+        """Ask the local model which paragraph indices start a new scene."""
+        if len(paragraphs) <= 1:
+            return []
+
+        numbered = "\n".join(f"[{i}] {p.strip()[:400]}" for i, p in enumerate(paragraphs))
+        prompt = f"""Segment this book chapter into semantically coherent SCENES.
+        A new scene starts when location, time, mood, or narrative event changes.
+        Return ONLY a JSON array of integer paragraph indices where a new scene begins.
+        Do NOT include index 0. Example: [3, 7, 12]
+
+        Paragraphs:
+        {numbered}"""
+
+        try:
+            response_text = await self._call_ollama(prompt)
+            match = re.search(r"\[[\d,\s]*\]", response_text, re.DOTALL)
+            raw = json.loads(match.group() if match else response_text)
+            return sorted({int(i) for i in raw if 0 < int(i) < len(paragraphs)})
+        except Exception:
+            return []
+
     def is_available(self) -> bool:
         """
         Check if Ollama service is available.

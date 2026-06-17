@@ -147,6 +147,23 @@ class TextChunkRepository:
         return response.data[0] if response.data else None
 
 
+class MediaAssetRepository:
+    """Repository for media asset tracking"""
+
+    def __init__(self, db: Database = None):
+        self.db = db or Database()
+
+    def create(self, asset_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Record a generated media asset (audio or image)"""
+        response = self.db.client.table('media_assets').insert(asset_data).execute()
+        return response.data[0] if response.data else None
+
+    def get_by_chunk(self, chunk_id: str) -> List[Dict[str, Any]]:
+        """Get all media assets for a text chunk"""
+        response = self.db.client.table('media_assets').select('*').eq('chunk_id', chunk_id).execute()
+        return response.data or []
+
+
 class ReadingProgressRepository:
     """Repository for reading progress database operations"""
     

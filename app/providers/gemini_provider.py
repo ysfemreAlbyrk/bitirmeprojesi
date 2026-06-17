@@ -1,8 +1,9 @@
 """Gemini API implementation of LLMProvider"""
+import asyncio
 import json
 import re
 import time
-from typing import Dict, Any, Callable, TypeVar
+from typing import Dict, Any, Callable, List, TypeVar
 from google import genai
 from app.providers.llm_provider import LLMProvider, SceneAnalysis
 from app.utils.api_logger import ApiCallTimer, log_api_request
@@ -53,6 +54,23 @@ class GeminiProvider(LLMProvider):
     def __init__(self):
         self.client = genai.Client(api_key=settings.gemini_api_key)
         self.model_name = settings.gemini_model
+
+    async def _generate(self, prompt: str, on_retry_msg: str) -> str:
+        """Run the (blocking) Gemini SDK call off the event loop so multiple
+        calls can run concurrently via asyncio.gather."""
+        def _call():
+            return self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt
+            )
+
+        def _run():
+            with ApiCallTimer("Gemini", on_retry_msg, f"model={self.model_name}") as timer:
+                response = _with_retry(_call, on_retry_msg=on_retry_msg)
+                timer.status = "200 OK"
+            return response.text
+
+        return await asyncio.to_thread(_run)
     
     async def analyze_scene(self, text: str) -> SceneAnalysis:
         """
@@ -86,16 +104,7 @@ class GeminiProvider(LLMProvider):
         print(f"\n{'='*60}\n[LLM PROMPT - analyze_scene]\n{'='*60}\n{full_prompt[:500]}...\n{'='*60}")
 
         try:
-            with ApiCallTimer("Gemini", "analyze_scene", f"model={self.model_name}") as timer:
-                def _call():
-                    return self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=full_prompt
-                    )
-
-                response = _with_retry(_call, on_retry_msg="analyze_scene")
-                timer.status = "200 OK"
-            result_text = response.text
+            result_text = await self._generate(full_prompt, on_retry_msg="analyze_scene")
 
             print(f"\n[LLM RESPONSE - analyze_scene]\n{'-'*60}\n{result_text[:500]}...\n{'='*60}\n")
 
@@ -156,17 +165,9 @@ class GeminiProvider(LLMProvider):
         print(f"\n{'='*60}\n[LLM PROMPT - check_copyright]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
 
         try:
-            with ApiCallTimer("Gemini", "check_copyright", f"model={self.model_name}") as timer:
-                def _call():
-                    return self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=prompt
-                    )
-
-                response = _with_retry(_call, on_retry_msg="check_copyright")
-                timer.status = "200 OK"
-            print(f"\n[LLM RESPONSE - check_copyright]\n{'-'*60}\n{response.text[:500]}...\n{'='*60}\n")
-            result = _extract_json(response.text)
+            result_text = await self._generate(prompt, on_retry_msg="check_copyright")
+            print(f"\n[LLM RESPONSE - check_copyright]\n{'-'*60}\n{result_text[:500]}...\n{'='*60}\n")
+            result = _extract_json(result_text)
             return result
         except Exception as e:
             print(f"\n[LLM ERROR - check_copyright] {str(e)}\n{'='*60}\n")
@@ -198,18 +199,39 @@ class GeminiProvider(LLMProvider):
         print(f"\n{'='*60}\n[LLM PROMPT - check_ethics]\n{'='*60}\n{prompt[:500]}...\n{'='*60}")
 
         try:
-            with ApiCallTimer("Gemini", "check_ethics", f"model={self.model_name}") as timer:
-                def _call():
-                    return self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=prompt
-                    )
-
-                response = _with_retry(_call, on_retry_msg="check_ethics")
-                timer.status = "200 OK"
-            print(f"\n[LLM RESPONSE - check_ethics]\n{'-'*60}\n{response.text[:500]}...\n{'='*60}\n")
-            result = _extract_json(response.text)
+            result_text = await self._generate(prompt, on_retry_msg="check_ethics")
+            print(f"\n[LLM RESPONSE - check_ethics]\n{'-'*60}\n{result_text[:500]}...\n{'='*60}\n")
+            result = _extract_json(result_text)
             return result
         except Exception as e:
             print(f"\n[LLM ERROR - check_ethics] {str(e)}\n{'='*60}\n")
             return {"status": "audit_failed", "reason": str(e), "confidence": 0.0}
+
+    async def detect_scene_boundaries(self, paragraphs: List[str]) -> List[int]:
+        """Ask Gemini which paragraph indices start a new scene."""
+        if len(paragraphs) <= 1:
+            return []
+
+        numbered = "\n".join(f"[{i}] {p.strip()[:400]}" for i, p in enumerate(paragraphs))
+        prompt = f"""You are segmenting a book chapter into semantically coherent SCENES.
+        A new scene starts when the location, time, mood/atmosphere, or narrative event
+        clearly changes. Below are numbered paragraphs.
+
+        Return ONLY a JSON array of integer paragraph indices where a NEW scene begins.
+        Do NOT include index 0 (the first paragraph is always a scene start).
+        Indices must be strictly increasing and within range.
+        Example: [3, 7, 12]
+
+        Paragraphs:
+        {numbered}"""
+
+        try:
+            result_text = await self._generate(prompt, on_retry_msg="detect_scene_boundaries")
+            text = result_text.strip()
+            match = re.search(r"\[[\d,\s]*\]", text, re.DOTALL)
+            raw = json.loads(match.group() if match else text)
+            boundaries = sorted({int(i) for i in raw if 0 < int(i) < len(paragraphs)})
+            return boundaries
+        except Exception as e:
+            print(f"\n[LLM ERROR - detect_scene_boundaries] {str(e)}\n{'='*60}\n")
+            return []

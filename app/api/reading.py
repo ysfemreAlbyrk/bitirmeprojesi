@@ -1,7 +1,8 @@
 """Reading progress and session API endpoints"""
 import uuid
-from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timedelta
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate, ReadingSessionCreate, ReadingSessionUpdate
 from app.core.database import Database, ReadingProgressRepository, BookRepository, TextChunkRepository
 from app.core.dependencies import get_database, get_reading_progress_repository, get_book_repository, get_text_chunk_repository
@@ -37,6 +38,14 @@ async def update_reading_session(
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    # If the session is ending, also update the book's last_read_date
+    if update_data.get('ended_at'):
+        session = db.client.table('reading_sessions').select('book_id').eq('id', session_id).execute()
+        if session.data:
+            book_id = session.data[0]['book_id']
+            db.client.table('books').update({'last_read_date': datetime.now().isoformat()}).eq('id', book_id).execute()
+
     response = db.client.table('reading_sessions').update(update_data).eq('id', session_id).execute()
     if response.data:
         return response.data[0]
@@ -82,6 +91,7 @@ async def save_reading_progress(
     offset: int,
     user_id: str = Depends(get_current_user_id),
     progress_repo: ReadingProgressRepository = Depends(get_reading_progress_repository),
+    db: Database = Depends(get_database),
 ):
     """Save reading progress for the authenticated user."""
     progress_data = {
@@ -94,6 +104,10 @@ async def save_reading_progress(
     }
 
     progress = progress_repo.upsert(progress_data)
+
+    # Update last_read_date on the book
+    db.client.table('books').update({'last_read_date': datetime.now().isoformat()}).eq('id', book_id).execute()
+
     return progress
 
 
@@ -156,3 +170,64 @@ async def delete_bookmark(
 
     db.client.table('bookmarks').delete().eq('id', bookmark_id).execute()
     return {"message": "Bookmark deleted successfully"}
+
+
+@router.get("/stats")
+async def get_reading_stats(
+    period: str = Query("week", regex="^(day|week|month|all)$"),
+    user_id: str = Depends(get_current_user_id),
+    db: Database = Depends(get_database)
+):
+    """
+    Aggregate reading statistics for the authenticated user.
+
+    - **period**: `day` | `week` | `month` | `all`
+
+    Returns total duration, immersive mode duration, session count,
+    books touched, and a daily breakdown for charts.
+    """
+    now = datetime.now()
+    if period == "day":
+        start = now - timedelta(days=1)
+    elif period == "week":
+        start = now - timedelta(days=7)
+    elif period == "month":
+        start = now - timedelta(days=30)
+    else:
+        start = datetime.min
+
+    sessions = (
+        db.client.table('reading_sessions')
+        .select('*')
+        .eq('user_id', user_id)
+        .gte('started_at', start.isoformat())
+        .execute()
+        .data or []
+    )
+
+    total_seconds = sum(s.get('duration_seconds', 0) or 0 for s in sessions)
+    immersive_seconds = sum(s.get('immersive_mode_seconds', 0) or 0 for s in sessions)
+    unique_books = len({s['book_id'] for s in sessions})
+
+    # Daily breakdown for charts
+    daily: dict[str, dict] = {}
+    for s in sessions:
+        day = s['started_at'][:10] if s.get('started_at') else 'unknown'
+        if day not in daily:
+            daily[day] = {"duration_seconds": 0, "immersive_seconds": 0, "sessions": 0}
+        daily[day]["duration_seconds"] += s.get('duration_seconds', 0) or 0
+        daily[day]["immersive_seconds"] += s.get('immersive_mode_seconds', 0) or 0
+        daily[day]["sessions"] += 1
+
+    return {
+        "period": period,
+        "total_seconds": total_seconds,
+        "total_minutes": round(total_seconds / 60, 1),
+        "immersive_seconds": immersive_seconds,
+        "immersive_minutes": round(immersive_seconds / 60, 1),
+        "session_count": len(sessions),
+        "books_read": unique_books,
+        "daily_breakdown": [
+            {"date": d, **v} for d, v in sorted(daily.items())
+        ],
+    }

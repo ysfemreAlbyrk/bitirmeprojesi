@@ -50,6 +50,6 @@ class BookmarkCreate(BaseModel):
     user_id: Optional[str] = None
     book_id: str
     chunk_id: str
-    chapter_number: int
-    offset: int
+    chapter_number: Optional[int] = None
+    offset: Optional[int] = None
     note: Optional[str] = None

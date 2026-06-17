@@ -1,6 +1,6 @@
 """Book management API endpoints"""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
-from typing import List
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Query
+from typing import List, Optional
 import uuid
 from pathlib import Path
 import aiofiles
@@ -8,12 +8,12 @@ from app.utils.logger import get_logger
 from app.utils.file_validator import FileValidator, FileValidationError
 from app.utils.pagination import PaginatedResponse, PaginationParams, paginate
 from app.middleware.rate_limit import limiter
-from app.tasks.book_tasks import process_book_async
+from app.tasks.book_tasks import process_book_async, retry_book_async
 from app.core.auth import get_current_user_id
 
 logger = get_logger("vibetale")
 
-from app.models.book import Book, BookCreate, BookResponse, ProcessingStatus
+from app.models.book import Book, BookCreate, BookUpdate, BookResponse, ProcessingStatus
 from app.core.database import BookRepository, TextChunkRepository, ChapterRepository
 from app.services.book_processing_service import BookProcessingService
 from app.core.storage import StorageService
@@ -247,6 +247,65 @@ async def get_book_chunks(
     ]
 
 
+@router.get("/search", response_model=PaginatedResponse[BookResponse])
+@limiter.limit("60/minute")
+async def search_books(
+    request: Request,
+    q: str = Query("", description="Search query for title or author"),
+    status: Optional[str] = Query(None, description="Filter by processing status"),
+    pagination: PaginationParams = Depends(),
+    book_repo: BookRepository = Depends(get_book_repository),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Search books by title or author, optionally filter by status."""
+    all_books = book_repo.get_by_user(user_id)
+
+    query_lower = q.lower().strip()
+    filtered = []
+    for book in all_books:
+        if status and book.get('processing_status') != status:
+            continue
+        if query_lower:
+            title = (book.get('title') or "").lower()
+            author = (book.get('author') or "").lower()
+            if query_lower not in title and query_lower not in author:
+                continue
+        filtered.append(book)
+
+    total = len(filtered)
+    paginated_items = filtered[pagination.offset:pagination.offset + pagination.page_size]
+
+    return paginate(
+        items=[BookResponse(**book) for book in paginated_items],
+        total=total,
+        params=pagination
+    )
+
+
+@router.put("/{book_id}", response_model=BookResponse)
+async def update_book(
+    book_id: str,
+    update: BookUpdate,
+    book_repo: BookRepository = Depends(get_book_repository),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Update book metadata (title, author, etc.)."""
+    book = book_repo.get_by_id(book_id)
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if book.get('user_id') != user_id:
+        raise HTTPException(status_code=403, detail="Bu kitaba erişim izniniz yok")
+
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updated = book_repo.update(book_id, update_data)
+    return BookResponse(**updated)
+
+
 @router.delete("/{book_id}")
 async def delete_book(
     book_id: str,
@@ -284,3 +343,30 @@ async def delete_book(
         return {"message": "Book deleted successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to delete book")
+
+
+@router.post("/{book_id}/retry")
+async def retry_book(
+    book_id: str,
+    book_repo: BookRepository = Depends(get_book_repository),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Retry processing a failed or partially processed book.
+    Resumes from where it left off, skipping already completed chunks."""
+    book = book_repo.get_by_id(book_id)
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if book.get('user_id') != user_id:
+        raise HTTPException(status_code=403, detail="Bu kitaba erişim izniniz yok")
+
+    if book.get('processing_status') == ProcessingStatus.PROCESSING.value:
+        raise HTTPException(status_code=409, detail="Book is already being processed")
+
+    logger.info(f"Retry requested for book {book_id}")
+
+    # Kick off Celery retry task
+    retry_book_async.delay(book_id=book_id)
+
+    return {"message": "Retry initiated", "book_id": book_id}

@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     db_pool_maxsize: int = 100
     db_connection_timeout: int = 30
     db_read_timeout: int = 30
-    db_write_timeout: int = 30
+    db_write_timeout: int = 120  # bumped for large audio/image uploads
     
     # Rate Limiting Configuration
     rate_limit_enabled: bool = True

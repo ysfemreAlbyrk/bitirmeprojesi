@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VibeTale Pipeline Test</title>
+<style>
+  :root{ --bg:#0b1220; --card:#111827; --text:#e5e7eb; --muted:#9ca3af; --primary:#38bdf8; --ok:#34d399; --err:#f87171; --warn:#fbbf24; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji";background:var(--bg);color:var(--text);padding:18px}
+  .container{max-width:1100px;margin:0 auto}
+  h1{margin:0 0 6px;font-size:22px}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:13px}
+  .card{background:var(--card);border:1px solid #1f2937;border-radius:12px;padding:16px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:720px){ .grid{grid-template-columns:1fr} }
+  label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px;font-weight:600}
+  input, select, textarea, button{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #374151;background:#0b1220;color:var(--text);font-size:14px}
+  button{border:none;background:var(--primary);color:#0b1220;font-weight:700;cursor:pointer}
+  button.secondary{background:#374151;color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;align-items:flex-end}
+  .row > *{flex:1}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:12px}
+  .logs{background:#060d18;border:1px solid #1f2937;border-radius:8px;padding:12px;max-height:320px;overflow:auto;white-space:pre-wrap;color:var(--muted)}
+  .ok{color:var(--ok)} .err{color:var(--err)} .warn{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+  th,td{padding:8px;border-bottom:1px solid #1f2937;text-align:left}
+  th{color:var(--muted)}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+  .badge-pending{background:rgba(251,191,36,.15);color:var(--warn)}
+  .badge-processing{background:rgba(56,189,248,.15);color:var(--primary)}
+  .badge-failed{background:rgba(248,113,113,.15);color:var(--err)}
+  .badge-completed{background:rgba(52,211,153,.15);color:var(--ok)}
+  .hidden{display:none}
+  .tabs{display:flex;gap:8px;border-bottom:1px solid #1f2937;margin-bottom:12px}
+  .tab{padding:8px 12px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;border-bottom:2px solid transparent}
+  .tab.active{color:var(--primary);border-color:var(--primary)}
+  .panel{display:none}
+  .panel.active{display:block}
+  .thumb{max-width:260px;border-radius:8px;border:1px solid #1f2937}
+  audio{width:100%;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>VibeTale Pipeline Test</h1>
+  <p class="sub">Mobil uygulamanın yaptığı her şeyi burada test edebilirsiniz. Backend API’ye direkt istek atar.</p>
+
+  <!-- Auth & Base URL -->
+  <div class="card">
+    <div class="grid">
+      <div>
+        <label>Backend Base URL</label>
+        <input id="baseUrl" value="http://localhost:8000">
+      </div>
+      <div>
+        <label>Supabase JWT Token (gerekirse)</label>
+        <input id="jwt" placeholder="eyJhbGciOiJIUzI1NiIs..." type="password">
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('upload')">Kitap Yükle</div>
+    <div class="tab" onclick="switchTab('library')">Kütüphane</div>
+    <div class="tab" onclick="switchTab('reader')">Okuma & Ambiyans</div>
+    <div class="tab" onclick="switchTab('stats')">Session & Stats</div>
+    <div class="tab" onclick="switchTab('console')">Console</div>
+  </div>
+
+  <!-- Upload Tab -->
+  <div id="tab-upload" class="panel active">
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label>Dosya (PDF / EPUB)</label>
+          <input type="file" id="upFile" accept=".pdf,.epub">
+        </div>
+        <div>
+          <label>Başlık</label>
+          <input id="upTitle" value="Pipeline Test Book">
+        </div>
+        <div>
+          <label>Yazar</label>
+          <input id="upAuthor" value="Test Author">
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button onclick="uploadBook()">Kitap Yükle & İşlemeyi Başlat</button>
+        <button class="secondary" onclick="pollStatus()">Status Yenile</button>
+      </div>
+      <div id="upStatus" style="margin-top:10px"></div>
+      <pre class="mono" id="upResult"></pre>
+    </div>
+  </div>
+
+  <!-- Library Tab -->
+  <div id="tab-library" class="panel">
+    <div class="card">
+      <div class="row">
+        <button onclick="listBooks()">Kitapları Listele</button>
+      </div>
+      <table id="libTable">
+        <thead><tr><th>ID</th><th>Başlık</th><th>Yazar</th><th>Status</th><th>Pages</th><th>Cover</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="bookDetail" class="card hidden">
+      <strong>Kitap Detayı</strong>
+      <pre class="mono" id="bookDetailJson"></pre>
+    </div>
+  </div>
+
+  <!-- Reader Tab -->
+  <div id="tab-reader" class="panel">
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label>Kitap ID</label>
+          <input id="rBookId" placeholder="book-id">
+        </div>
+        <div>
+          <label>Chunk ID (ambiyans testi için)</label>
+          <input id="rChunkId" placeholder="chunk-id">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="loadChunks()">Chunk’ları Getir</button>
+        <button class="secondary" onclick="loadAmbiance()">Ambiyans Getir</button>
+        <button class="secondary" onclick="loadProgress()">Progress Getir</button>
+      </div>
+      <div id="readerResult" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Stats Tab -->
+  <div id="tab-stats" class="panel">
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label>Kitap ID</label>
+          <input id="sBookId" placeholder="book-id">
+        </div>
+        <div>
+          <label>Session ID</label>
+          <input id="sSessionId" placeholder="session-id (boş bırak = yeni)">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="createSession()">Session Başlat</button>
+        <button class="secondary" onclick="endSession()">Session Bitir</button>
+        <button class="secondary" onclick="saveProgress()">Progress Kaydet</button>
+        <button class="secondary" onclick="getStats()">Stats Göster</button>
+      </div>
+      <pre class="mono" id="statsResult" style="margin-top:10px"></pre>
+    </div>
+  </div>
+
+  <!-- Console Tab -->
+  <div id="tab-console" class="panel">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong>API Log</strong>
+        <button class="secondary" onclick="clearLog()">Temizle</button>
+      </div>
+      <div class="logs" id="console"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const base = () => $('baseUrl').value.replace(/\/$/,'');
+  const jwt = () => $('jwt').value.trim();
+  const hdr = () => {
+    const h = {'Accept':'application/json'};
+    if (jwt()) h['Authorization'] = 'Bearer ' + jwt();
+    return h;
+  };
+
+  function log(msg, cls='') {
+    const line = document.createElement('div');
+    line.className = cls;
+    line.textContent = new Date().toLocaleTimeString('tr-TR',{hour12:false}) + '  ' + msg;
+    $('console').appendChild(line);
+    $('console').scrollTop = $('console').scrollHeight;
+  }
+  function clearLog(){ $('console').innerHTML=''; }
+  function switchTab(name){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    event.target.classList.add('active');
+    $('tab-'+name).classList.add('active');
+  }
+
+  async function req(url, opts={}){
+    const full = base() + url;
+    log(`${opts.method||'GET'} ${url}`);
+    try {
+      const r = await fetch(full, {headers:{...hdr(), ...opts.headers||{}}, ...opts});
+      const txt = await r.text();
+      let data = null; try { data = JSON.parse(txt); } catch(e){ data = txt; }
+      if (!r.ok) { log(`  HTTP ${r.status}: ${data.detail||txt}`, 'err'); throw new Error(data.detail||`HTTP ${r.status}`); }
+      log(`  OK ${r.status}`, 'ok');
+      return data;
+    } catch(e) {
+      if (e.message.includes('Failed to fetch')) log('  Network/CORS hatası – backend çalışıyor mu?', 'err');
+      throw e;
+    }
+  }
+
+  // ── Upload ──
+  async function uploadBook(){
+    const f = $('upFile').files[0]; if(!f){ alert('Dosya seçin'); return; }
+    const form = new FormData();
+    form.append('file', f);
+    form.append('title', $('upTitle').value||'Test');
+    form.append('author', $('upAuthor').value||'Author');
+    const data = await req('/books/upload', {method:'POST', body:form});
+    $('upResult').textContent = JSON.stringify(data,null,2);
+    $('upStatus').innerHTML = `<span class="badge badge-processing">Yüklendi – ID: ${data.id}</span>`;
+    log('Kitap yüklendi: ' + data.id, 'ok');
+  }
+  async function pollStatus(){
+    const id = prompt('Kitap ID girin:'); if(!id) return;
+    const data = await req('/books/'+id+'/status');
+    $('upStatus').innerHTML = `<span class="badge badge-${data.processing_status}">${data.processing_status}</span>`;
+    log('Status: ' + JSON.stringify(data), 'warn');
+  }
+
+  // ── Library ──
+  async function listBooks(){
+    const data = await req('/books');
+    const rows = (data.items||[]).map(b=>`
+      <tr>
+        <td class="mono">${b.id?.slice(0,8)}…</td>
+        <td>${b.title}</td>
+        <td>${b.author||''}</td>
+        <td><span class="badge badge-${b.processing_status}">${b.processing_status}</span></td>
+        <td>${b.total_pages??'-'}</td>
+        <td>${b.cover_url?'Var':'-'}</td>
+        <td><button onclick="getBook('${b.id}')">Detay</button></td>
+      </tr>`).join('');
+    $('libTable').querySelector('tbody').innerHTML = rows || '<tr><td colspan="7">Kitap yok</td></tr>';
+  }
+  async function getBook(id){
+    const data = await req('/books/'+id);
+    $('bookDetail').classList.remove('hidden');
+    $('bookDetailJson').textContent = JSON.stringify(data,null,2);
+  }
+
+  // ── Reader ──
+  async function loadChunks(){
+    const id = $('rBookId').value.trim(); if(!id){alert('Kitap ID girin');return;}
+    const data = await req('/books/'+id+'/chunks');
+    $('readerResult').innerHTML = '<pre class="mono">'+JSON.stringify(data,null,2).slice(0,6000)+'</pre>';
+  }
+  async function loadAmbiance(){
+    const cid = $('rChunkId').value.trim(); if(!cid){alert('Chunk ID girin');return;}
+    const data = await req('/ambiance/chunk/'+cid);
+    let html = `<pre class="mono">${JSON.stringify(data,null,2)}</pre>`;
+    if(data.image_url) html += `<img class="thumb" src="${data.image_url}" onerror="this.style.display='none'">`;
+    if(data.audio_url) html += `<audio controls src="${data.audio_url}"></audio>`;
+    $('readerResult').innerHTML = html;
+  }
+  async function loadProgress(){
+    const id = $('rBookId').value.trim(); if(!id){alert('Kitap ID girin');return;}
+    const data = await req('/reading/progress/'+id);
+    $('readerResult').innerHTML = '<pre class="mono">'+JSON.stringify(data,null,2)+'</pre>';
+  }
+
+  // ── Stats ──
+  async function createSession(){
+    const bid = $('sBookId').value.trim(); if(!bid){alert('Kitap ID girin');return;}
+    const data = await req('/reading/sessions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({book_id:bid})
+    });
+    $('sSessionId').value = data.id;
+    $('statsResult').textContent = JSON.stringify(data,null,2);
+  }
+  async function endSession(){
+    const sid = $('sSessionId').value.trim(); if(!sid){alert('Session ID yok');return;}
+    const data = await req('/reading/sessions/'+sid, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ended_at:new Date().toISOString(), duration_seconds:120, immersive_mode_seconds:45})
+    });
+    $('statsResult').textContent = JSON.stringify(data,null,2);
+  }
+  async function saveProgress(){
+    const bid = $('sBookId').value.trim(); if(!bid){alert('Kitap ID girin');return;}
+    const data = await req('/reading/progress?book_id='+bid+'&current_chunk_id=test-chunk&chapter_number=1&offset=0', {method:'POST'});
+    $('statsResult').textContent = JSON.stringify(data,null,2);
+  }
+  async function getStats(){
+    const data = await req('/reading/stats?period=week');
+    $('statsResult').textContent = JSON.stringify(data,null,2);
+  }
+</script>
+</body>
+</html>

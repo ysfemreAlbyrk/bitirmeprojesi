@@ -6,8 +6,9 @@ from app.utils.logger import get_logger
 
 logger = get_logger("vibetale")
 
-# How many paragraphs to send to the LLM per boundary-detection call
-_BOUNDARY_WINDOW = 40
+# How many paragraphs to send to the LLM per boundary-detection call.
+# Lower value = shorter prompts (safer for 500 errors), more API calls.
+_BOUNDARY_WINDOW = 20
 
 
 class SemanticSplitter:

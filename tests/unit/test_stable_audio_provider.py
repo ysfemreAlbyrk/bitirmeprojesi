@@ -1,6 +1,31 @@
 """Unit tests for StableAudioProvider"""
+import sys
+import types
 import pytest
 from unittest.mock import Mock, patch, MagicMock
+
+class _FakeTorch(types.ModuleType):
+    """Stub module that auto-creates MagicMock attributes and provides a real Tensor type."""
+    def __init__(self, name):
+        super().__init__(name)
+        self._mocks = {}
+    def __getattr__(self, name):
+        if name == "Tensor":
+            return type('Tensor', (), {})
+        if name not in self._mocks:
+            self._mocks[name] = MagicMock()
+        return self._mocks[name]
+
+# Pre-populate heavy modules so tests never touch real torch/torchaudio
+sys.modules["torch"] = _FakeTorch("torch")
+sys.modules["torch._utils"] = types.ModuleType("torch._utils")
+sys.modules["torchaudio"] = _FakeTorch("torchaudio")
+
+# Prevent the real stable_audio_3 submodule from being imported
+_fake = types.ModuleType("stable_audio_3")
+_fake.StableAudioModel = MagicMock()
+sys.modules["stable_audio_3"] = _fake
+
 from app.providers.stable_audio_provider import StableAudioProvider
 
 

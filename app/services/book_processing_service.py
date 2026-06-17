@@ -53,7 +53,8 @@ class BookProcessingService:
         self,
         book_id: str,
         file_path: str,
-        file_format: str
+        file_format: str,
+        skip_completed_chunks: bool = False
     ) -> None:
         """
         Process a book through the entire pipeline.
@@ -167,12 +168,28 @@ class BookProcessingService:
                 logger.info(f"Created {len(chunk_records)} chunks across {len(chapters_data)} chapters")
 
             # Step 5: Process each chunk (analyze + media), skipping completed work
+            processed = 0
+            failed = 0
             for i, chunk in enumerate(chunk_records):
+                # On retry, skip chunks that already have both audio and image
+                if skip_completed_chunks and chunk.get('audio_url') and chunk.get('image_url'):
+                    logger.debug(f"Skipping chunk {i + 1}/{len(chunk_records)} (already complete)")
+                    continue
                 logger.debug(f"Processing chunk {i + 1}/{len(chunk_records)}")
-                await self._process_chunk(chunk)
+                try:
+                    await self._process_chunk(chunk)
+                    processed += 1
+                except Exception as chunk_err:
+                    failed += 1
+                    logger.error(f"Chunk {chunk['id']} failed (continuing): {chunk_err}", exc_info=False)
 
-            # Update book status to completed
-            self.book_repo.update(book_id, {'processing_status': ProcessingStatus.COMPLETED})
+            logger.info(f"Chunk processing complete: {processed} succeeded, {failed} failed out of {len(chunk_records)}")
+
+            # Mark completed only if all chunks succeeded; partial is still "processing"
+            if failed == 0:
+                self.book_repo.update(book_id, {'processing_status': ProcessingStatus.COMPLETED})
+            else:
+                self.book_repo.update(book_id, {'processing_status': ProcessingStatus.FAILED})
 
         except Exception as e:
             # Update book status to failed

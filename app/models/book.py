@@ -53,6 +53,8 @@ class BookCreate(BaseModel):
 
 
 class BookUpdate(BaseModel):
+    title: Optional[str] = None
+    author: Optional[str] = None
     processing_status: Optional[ProcessingStatus] = None
     audit_result: Optional[AuditResult] = None
     cover_url: Optional[str] = None
@@ -69,8 +71,9 @@ class BookResponse(BaseModel):
     processing_status: ProcessingStatus
     audit_result: Optional[AuditResult] = None
     cover_url: Optional[str] = None
+    total_pages: Optional[int] = None
     upload_date: datetime
     last_read_date: Optional[datetime] = None
-    
+
     class Config:
         use_enum_values = True

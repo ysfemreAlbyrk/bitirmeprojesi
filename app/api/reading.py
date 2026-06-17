@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from app.models.reading import ReadingProgress, Bookmark, BookmarkCreate, ReadingSessionCreate, ReadingSessionUpdate
 from app.core.database import Database, ReadingProgressRepository, BookRepository, TextChunkRepository
 from app.core.dependencies import get_database, get_reading_progress_repository, get_book_repository, get_text_chunk_repository
@@ -83,12 +84,16 @@ async def get_reading_progress(
     return progress
 
 
+class ReadingProgressSave(BaseModel):
+    book_id: str
+    current_chunk_id: str
+    chapter_number: int
+    offset: int
+
+
 @router.post("/progress")
 async def save_reading_progress(
-    book_id: str,
-    current_chunk_id: str,
-    chapter_number: int,
-    offset: int,
+    payload: ReadingProgressSave,
     user_id: str = Depends(get_current_user_id),
     progress_repo: ReadingProgressRepository = Depends(get_reading_progress_repository),
     db: Database = Depends(get_database),
@@ -97,16 +102,16 @@ async def save_reading_progress(
     progress_data = {
         'id': str(uuid.uuid4()),
         'user_id': user_id,
-        'book_id': book_id,
-        'current_chunk_id': current_chunk_id,
-        'chapter_number': chapter_number,
-        'offset': offset,
+        'book_id': payload.book_id,
+        'current_chunk_id': payload.current_chunk_id,
+        'chapter_number': payload.chapter_number,
+        'offset': payload.offset,
     }
 
     progress = progress_repo.upsert(progress_data)
 
     # Update last_read_date on the book
-    db.client.table('books').update({'last_read_date': datetime.now().isoformat()}).eq('id', book_id).execute()
+    db.client.table('books').update({'last_read_date': datetime.now().isoformat()}).eq('id', payload.book_id).execute()
 
     return progress
 
@@ -174,7 +179,7 @@ async def delete_bookmark(
 
 @router.get("/stats")
 async def get_reading_stats(
-    period: str = Query("week", regex="^(day|week|month|all)$"),
+    period: str = Query("week", pattern="^(day|week|month|all)$"),
     user_id: str = Depends(get_current_user_id),
     db: Database = Depends(get_database)
 ):

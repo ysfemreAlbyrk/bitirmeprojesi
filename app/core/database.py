@@ -1,5 +1,6 @@
 """Supabase database connection and repository layer"""
 from supabase import create_client, Client
+from supabase.lib.client_options import SyncClientOptions
 from config import settings
 from typing import Optional, List, Dict, Any
 from app.utils.logger import get_logger
@@ -35,13 +36,23 @@ class Database:
                 pool=5.0
             )
             
-            # Create client (simple initialization for compatibility)
-            self._client = create_client(
-                settings.supabase_url,
-                settings.supabase_service_key
+            # Create custom httpx client with extended timeout
+            http_client = httpx.Client(limits=limits, timeout=timeout)
+            
+            options = SyncClientOptions(
+                postgrest_client_timeout=settings.db_write_timeout,
+                storage_client_timeout=settings.db_write_timeout,
+                schema="public"
             )
             
-            logger.info(f"Database connection pool configured: max_connections={settings.db_pool_maxsize}, keepalive={settings.db_pool_connections}")
+            # Create client with custom options
+            self._client = create_client(
+                settings.supabase_url,
+                settings.supabase_service_key,
+                options=options
+            )
+            
+            logger.info(f"Database connection pool configured: max_connections={settings.db_pool_maxsize}, keepalive={settings.db_pool_connections}, write_timeout={settings.db_write_timeout}s")
     
     @property
     def client(self) -> Client:

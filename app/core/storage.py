@@ -1,6 +1,7 @@
 """Supabase Storage operations for media assets"""
 import asyncio
 import mimetypes
+import time
 from supabase import Client
 from config import settings
 from pathlib import Path
@@ -39,15 +40,26 @@ class StorageService:
         if mime_type is None:
             mime_type = "application/octet-stream"
 
+        # Supabase Storage rejects audio/x-wav; use the standard audio/wav
+        if mime_type == "audio/x-wav":
+            mime_type = "audio/wav"
+
         def _do_upload():
             with open(file_path, 'rb') as f:
                 file_bytes = f.read()
-            self.client.storage.from_(self.bucket_name).upload(
-                object_name,
-                file_bytes,
-                file_options={"content-type": mime_type}
-            )
-            return self.client.storage.from_(self.bucket_name).get_public_url(object_name)
+            # Retry with exponential backoff for transient network issues
+            for attempt in range(1, 4):
+                try:
+                    self.client.storage.from_(self.bucket_name).upload(
+                        object_name,
+                        file_bytes,
+                        file_options={"content-type": mime_type}
+                    )
+                    return self.client.storage.from_(self.bucket_name).get_public_url(object_name)
+                except Exception as exc:
+                    if attempt == 3:
+                        raise
+                    time.sleep(2 ** attempt)  # 2s, 4s
 
         with ApiCallTimer("SupabaseStorage", "upload", f"bucket={self.bucket_name},object={object_name}") as timer:
             result = await asyncio.to_thread(_do_upload)

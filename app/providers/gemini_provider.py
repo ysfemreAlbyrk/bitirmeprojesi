@@ -51,14 +51,28 @@ def _extract_json(text: str) -> dict:
 class GeminiProvider(LLMProvider):
     """Gemini API implementation for text analysis"""
     
+    # 15 requests per minute = minimum 4 seconds between calls
+    MIN_CALL_INTERVAL = 4.0  # seconds
+    
     def __init__(self):
         self.client = genai.Client(api_key=settings.gemini_api_key)
         self.model_name = settings.gemini_model
+        self._last_call_time = 0.0
 
     async def _generate(self, prompt: str, on_retry_msg: str) -> str:
         """Run the (blocking) Gemini SDK call off the event loop so multiple
         calls can run concurrently via asyncio.gather."""
+        
+        # Throttle to respect rate limits (15 req/min)
+        now = time.monotonic()
+        elapsed = now - self._last_call_time
+        if elapsed < self.MIN_CALL_INTERVAL:
+            sleep_for = self.MIN_CALL_INTERVAL - elapsed
+            print(f"\n[LLM THROTTLE] Sleeping {sleep_for:.1f}s before next call")
+            await asyncio.sleep(sleep_for)
+        
         def _call():
+            self._last_call_time = time.monotonic()
             return self.client.models.generate_content(
                 model=self.model_name,
                 contents=prompt
